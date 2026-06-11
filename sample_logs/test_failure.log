@@ -1,0 +1,12 @@
+============================= test session starts =============================
+platform linux -- Python 3.12.5, pytest-8.2.2
+collected 12 items
+
+tests/test_parser.py ..F......
+
+=================================== FAILURES ===================================
+________________________ test_parse_empty_log ________________________________
+E       AssertionError: expected empty output
+=========================== short test summary info ===========================
+FAILED tests/test_parser.py::test_parse_empty_log - AssertionError: expected empty output
+Error: Process completed with exit code 1.

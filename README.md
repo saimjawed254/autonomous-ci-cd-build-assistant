@@ -17,7 +17,7 @@ Use your Python environment and pass any log file path.
 python assistant.py "C:\path\to\your\build.log"
 ```
 
-## Console Output You Should Expect
+## Console Output To Expect
 
 The CLI prints:
 

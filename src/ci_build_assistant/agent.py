@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -9,7 +10,7 @@ from .config import load_settings
 from .parser import BuildLog
 from .memory import get_log_signature, get_past_attempts, record_attempt
 from .analysis import analyze_build_log
-from .tools import post_pr_comment, trigger_workflow_rerun
+from .tools import post_pr_comment, trigger_workflow_rerun, get_pr_comments
 
 
 def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> bool:
@@ -34,6 +35,37 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     # 2. Check Memory
     history_file = root / ".build_assistant_history.json"
     past_attempts = get_past_attempts(history_file, signature)
+
+    token = settings.github_token
+    repo = settings.github_repository
+    run_id = settings.github_run_id
+    pr_number = settings.github_pr_number
+
+    # Reconstruct past attempts from PR comments if available
+    pr_attempts = []
+    if token and repo and pr_number:
+        print(f"Fetching PR comments from {repo} PR #{pr_number} to reconstruct history...")
+        try:
+            comments = get_pr_comments(repo, pr_number, token)
+            for comment in comments:
+                matches = re.findall(r"<!--\s*build_assistant_metadata:\s*(.*?)\s*-->", comment)
+                for match in matches:
+                    parts = match.split(":", 1)
+                    if len(parts) == 2 and len(parts[0]) == 64 and all(c in "0123456789abcdef" for c in parts[0]):
+                        if parts[0] == signature:
+                            pr_attempts.append(parts[1])
+                    else:
+                        pr_attempts.append(match)
+            print(f"Extracted {len(pr_attempts)} historical attempts from PR comments.")
+        except Exception as exc:
+            print(f"Warning: Failed to fetch/parse PR comments for history: {exc}", file=sys.stderr)
+
+    # Merge local history attempts with PR comments attempts, preserving order and uniqueness
+    unique_attempts = []
+    for attempt in past_attempts + pr_attempts:
+        if attempt not in unique_attempts:
+            unique_attempts.append(attempt)
+    past_attempts = unique_attempts
 
     # 3. Safety Guardrails (Max 3 attempts)
     if len(past_attempts) >= 3:
@@ -71,12 +103,6 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     print(f"Reasoned Failure Category: {diagnosis.failure_type.value}")
     print(f"Reasoned Fix Proposal: {suggested_fix}")
 
-    # 5. Act: Check credentials and trigger GitHub actions
-    token = settings.github_token
-    repo = settings.github_repository
-    run_id = settings.github_run_id
-    pr_number = settings.github_pr_number
-
     if not token or not repo:
         print("\nWarning: GITHUB_TOKEN or GITHUB_REPOSITORY is not set in settings.")
         print("Saving attempt locally, but skipping GitHub API interactions.")
@@ -99,6 +125,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
             comment_body += f"{idx}. {step}\n"
             
         comment_body += f"\n*Attempt #{len(past_attempts) + 1} started. Automatically triggering pipeline re-run...*"
+        comment_body += f"\n<!-- build_assistant_metadata: {signature}:{suggested_fix} -->"
 
         try:
             post_pr_comment(repo, pr_number, comment_body, token)

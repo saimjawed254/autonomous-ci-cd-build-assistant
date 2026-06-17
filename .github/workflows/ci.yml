@@ -10,6 +10,10 @@ jobs:
   build:
     name: Build & Run Checks
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
 
     steps:
       - name: Checkout Code
@@ -57,8 +61,8 @@ jobs:
 
       # -------------------------------------------------------------
       # RUN AI BUILD ASSISTANT:
-      # Automatically triggers when the build fails, reads the log,
-      # diagnoses the issue, writes a comment on the PR, and triggers re-run.
+      # Diagnoses the issue and writes a comment on the PR.
+      # Re-run is handled separately by retry.yml.
       # -------------------------------------------------------------
       - name: Run AI Build Assistant
         if: failure()
@@ -67,3 +71,5 @@ jobs:
           log-file: 'build_failure.log'
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           mode: 'agent'
+          github-token: ${{ secrets.PAT_TOKEN }}
+

@@ -10,7 +10,7 @@ from .config import load_settings
 from .parser import BuildLog
 from .memory import get_log_signature, get_past_attempts, record_attempt
 from .analysis import analyze_build_log
-from .tools import post_pr_comment, trigger_workflow_rerun, get_pr_comments
+from .tools import post_pr_comment, get_pr_comments
 
 
 def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> bool:
@@ -23,7 +23,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     5. Act:
        - Post diagnosis details as a PR comment.
        - Save attempt status to local memory.
-       - Re-trigger the failed GitHub Action workflow run.
+       - Re-run is handled by a separate retry workflow.
     """
 
     root = project_root or Path.cwd()
@@ -124,7 +124,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         for idx, step in enumerate(diagnosis.fix_steps, 1):
             comment_body += f"{idx}. {step}\n"
             
-        comment_body += f"\n*Attempt #{len(past_attempts) + 1} started. Automatically triggering pipeline re-run...*"
+        comment_body += f"\n*Attempt #{len(past_attempts) + 1}. A re-run will be triggered automatically.*"
         comment_body += f"\n<!-- build_assistant_metadata: {signature}:{suggested_fix} -->"
 
         try:
@@ -135,22 +135,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     else:
         print("No GITHUB_PR_NUMBER environment variable found. Skipping PR comment tool.")
 
-    # Act Part B: Record attempt as 'running' in memory
+    # Act Part B: Record attempt in memory
     record_attempt(history_file, signature, suggested_fix, "running")
-
-    # Act Part C: Trigger Workflow Rerun
-    if run_id:
-        print(f"Triggering GitHub Actions workflow re-run for Run #{run_id}...")
-        try:
-            trigger_workflow_rerun(repo, run_id, token)
-            print("Workflow re-run triggered successfully.")
-            return True
-        except Exception as exc:
-            print(f"Error: failed to trigger workflow re-run: {exc}", file=sys.stderr)
-            # Re-record status as failed since the rerun trigger failed
-            record_attempt(history_file, signature, suggested_fix, "failed")
-            return False
-    else:
-        print("Error: GITHUB_RUN_ID is missing. Cannot trigger workflow re-run.")
-        record_attempt(history_file, signature, suggested_fix, "failed")
-        return False
+    print("Diagnosis complete. Re-run will be triggered by the retry workflow.")
+    return True

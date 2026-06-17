@@ -58,6 +58,12 @@ def trigger_workflow_rerun(repo: str, run_id: int, token: str) -> None:
     try:
         with request.urlopen(http_request, timeout=15) as response:
             response.read()
+    except error.HTTPError as exc:
+        try:
+            error_body = exc.read().decode("utf-8")
+        except Exception:
+            error_body = "Could not read error body"
+        raise RuntimeError(f"Failed to trigger workflow re-run: {exc}. Response: {error_body}") from exc
     except error.URLError as exc:
         raise RuntimeError(f"Failed to trigger workflow re-run: {exc}") from exc
 

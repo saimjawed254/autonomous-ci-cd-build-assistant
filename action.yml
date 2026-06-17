@@ -20,6 +20,11 @@ inputs:
     description: 'Execution mode: "diagnose" (outputs dashboard report) or "agent" (attempts autonomous re-runs)'
     required: false
     default: 'agent'
+  github-token:
+    description: 'GitHub token or Personal Access Token (PAT) with actions:write permissions'
+    required: false
+    default: '${{ github.token }}'
+
 
 runs:
   using: 'composite'
@@ -42,7 +47,7 @@ runs:
       run: |
         $env:GEMINI_API_KEY = "${{ inputs.gemini-api-key }}"
         $env:GEMINI_MODEL = "${{ inputs.gemini-model }}"
-        $env:GITHUB_TOKEN = "${{ github.token }}"
+        $env:GITHUB_TOKEN = "${{ inputs.github-token }}"
         $env:GITHUB_REPOSITORY = "${{ github.repository }}"
         $env:GITHUB_RUN_ID = "${{ github.run_id }}"
         

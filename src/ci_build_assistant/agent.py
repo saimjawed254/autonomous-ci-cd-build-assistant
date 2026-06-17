@@ -41,6 +41,10 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     run_id = settings.github_run_id
     pr_number = settings.github_pr_number
 
+    if token:
+        prefix = token[:12] if len(token) >= 12 else token
+        print(f"[DEBUG] github_token loaded. Prefix: '{prefix}', Length: {len(token)}")
+
     # Reconstruct past attempts from PR comments if available
     pr_attempts = []
     if token and repo and pr_number:

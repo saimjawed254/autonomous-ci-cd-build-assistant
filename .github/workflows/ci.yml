@@ -71,4 +71,4 @@ jobs:
           log-file: 'build_failure.log'
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           mode: 'agent'
-          github-token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.PAT_TOKEN }}

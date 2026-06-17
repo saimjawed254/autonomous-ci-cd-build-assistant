@@ -59,13 +59,36 @@ If you specify the `--json` option, the CLI outputs a structured JSON diagnosis 
 python assistant.py "C:\path\to\your\build.log" --json
 ```
 
-## Week 2 Status
+## GitHub Action Usage
 
-- **Completed**: Gemini client with `.env` support.
-- **Completed**: Structured JSON diagnosis contract.
-- **Completed**: Direct Gemini-only diagnosis with explicit error reporting.
-- **Completed**: Prompt templates and response parsing.
-- **Completed**: Expanded failure coverage to 10 distinct categories.
-- **Completed**: Redesigned CLI with user-friendly human-readable dashboard and `--json` fallback.
-- **Completed**: Established offline-compatible unit/CLI test suites using mocks in `tests/`.
-- **Next**: Start Week 3 to build the agentic loop (Reasoning & Action).
+The assistant is packaged as a reusable composite GitHub Action. To integrate it into any repository workflow on failure, add a step like this:
+
+```yaml
+- name: Run AI Build Assistant
+  if: failure()
+  uses: saimjawed254/accenture-intern-assignment@main
+  with:
+    log-file: 'build_failure.log'
+    gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+    mode: 'agent'
+```
+
+### Action Inputs
+
+| Input | Description | Required | Default |
+| :--- | :--- | :--- | :--- |
+| `log-file` | Path to the build log file to analyze | **Yes** | N/A |
+| `gemini-api-key` | API Key for Gemini (Google AI Studio) | **Yes** | N/A |
+| `gemini-model` | Gemini model identifier | No | `gemini-3.1-flash-lite` |
+| `mode` | Execution mode: `diagnose` (prints report) or `agent` (PR comments + re-run) | No | `agent` |
+
+### Robust Fallback Mode
+
+If Gemini is unreachable, the API key is not configured, or network timeouts occur, the assistant automatically falls back to a local **Rule-Based Classifier** that processes log keywords offline to diagnose issues, ensuring the pipeline never crashes.
+
+## Project Status
+
+- **Completed (Week 1)**: Core parser and regex-based classifier.
+- **Completed (Week 2)**: Gemini client, structured JSON diagnostics, and 10 categories.
+- **Completed (Week 3)**: Autonomous Agentic Loop (PR commenting, workflow re-runs, state memory, and safety retry caps).
+- **Completed (Week 4)**: Packaged composite Action, defensive fallback logic, and demo configuration.

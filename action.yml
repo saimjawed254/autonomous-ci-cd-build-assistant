@@ -1,0 +1,54 @@
+name: 'AI-Powered CI/CD Build Assistant'
+description: 'Diagnoses build failures from pipeline logs and triggers recovery attempts autonomously.'
+author: 'Google DeepMind Pair Programming'
+branding:
+  icon: 'terminal'
+  color: 'blue'
+
+inputs:
+  log-file:
+    description: 'Path to the build log file to analyze'
+    required: true
+  gemini-api-key:
+    description: 'API key for Google AI Studio'
+    required: true
+  gemini-model:
+    description: 'Gemini model identifier'
+    required: false
+    default: 'gemini-3.1-flash-lite'
+  mode:
+    description: 'Execution mode: "diagnose" (outputs dashboard report) or "agent" (attempts autonomous re-runs)'
+    required: false
+    default: 'agent'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      shell: pwsh
+      run: |
+        python -m pip install --upgrade pip
+        if (Test-Path "${{ github.action_path }}/requirements.txt") {
+          python -m pip install -r "${{ github.action_path }}/requirements.txt"
+        }
+
+    - name: Run Build Assistant
+      shell: pwsh
+      run: |
+        $env:GEMINI_API_KEY = "${{ inputs.gemini-api-key }}"
+        $env:GEMINI_MODEL = "${{ inputs.gemini-model }}"
+        $env:GITHUB_TOKEN = "${{ github.token }}"
+        $env:GITHUB_REPOSITORY = "${{ github.repository }}"
+        $env:GITHUB_RUN_ID = "${{ github.run_id }}"
+        
+        # Pull Request event extraction
+        if ("${{ github.event_name }}" -eq "pull_request") {
+          $env:GITHUB_PR_NUMBER = "${{ github.event.number }}"
+        }
+        
+        python "${{ github.action_path }}/assistant.py" "${{ inputs.log-file }}" --mode "${{ inputs.mode }}"

@@ -9,3 +9,4 @@ dist/
 .idea/
 .vscode/
 unwanted/
+.build_assistant_history.json

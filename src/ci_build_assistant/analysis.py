@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import sys
 from dataclasses import dataclass
 from typing import Any
 
+from .classifier import classify_failure
 from .config import load_settings
 from .llm_client import GeminiClient
 from .parser import BuildLog
@@ -30,29 +32,44 @@ class AnalysisResult:
         return data
 
 
-def analyze_build_log(build_log: BuildLog) -> AnalysisResult:
-    """Analyze a build log using Gemini only."""
+def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = None) -> AnalysisResult:
+    """Analyze a build log using Gemini with a rule-based fallback."""
 
     settings = load_settings()
     client = GeminiClient(settings)
 
-    if not client.is_configured():
-        raise RuntimeError("GEMINI_API_KEY is not configured")
+    llm_enabled = client.is_configured()
 
-    user_prompt = build_user_prompt(build_log)
-
-    try:
-        response = client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
-        diagnosis = _parse_llm_response(response.text)
+    if llm_enabled:
+        try:
+            user_prompt = build_user_prompt(build_log, past_attempts)
+            response = client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
+            diagnosis = _parse_llm_response(response.text)
+            return AnalysisResult(
+                diagnosis=diagnosis,
+                used_llm=True,
+                llm_enabled=True,
+            )
+        except Exception as exc:
+            # Catch API errors, timeouts, or JSON parsing issues and degrade gracefully
+            print(f"Warning: Gemini analysis failed ({exc}). Falling back to rule-based classifier.", file=sys.stderr)
+            diagnosis = classify_failure(build_log)
+            return AnalysisResult(
+                diagnosis=diagnosis,
+                used_llm=False,
+                llm_enabled=True,
+                error_message=str(exc),
+            )
+    else:
+        # Fall back directly if API key is not configured
+        print("Warning: GEMINI_API_KEY is not configured. Falling back to rule-based classifier.", file=sys.stderr)
+        diagnosis = classify_failure(build_log)
         return AnalysisResult(
             diagnosis=diagnosis,
-            used_llm=True,
-            llm_enabled=True,
+            used_llm=False,
+            llm_enabled=False,
+            error_message="GEMINI_API_KEY not set",
         )
-    except RuntimeError:
-        raise
-    except Exception as exc:
-        raise RuntimeError(f"Gemini analysis failed: {exc}") from exc
 
 
 def _parse_llm_response(text: str) -> FailureDiagnosis:

@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-from src.ci_build_assistant import analyze_build_log, read_build_log
+from src.ci_build_assistant import analyze_build_log, read_build_log, run_agent_loop
 from src.ci_build_assistant.config import load_settings
 
 
@@ -42,6 +42,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Output the analysis in raw JSON format instead of the human-readable dashboard.",
     )
+    parser.add_argument(
+        "--mode",
+        choices=["diagnose", "agent"],
+        default="diagnose",
+        help="Execution mode: 'diagnose' (default - print report) or 'agent' (observe and trigger active fixes).",
+    )
     return parser
 
 
@@ -64,6 +70,10 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as exc:
         print(f"Error: could not read {args.log_file}: {exc}", file=sys.stderr)
         return 1
+
+    if args.mode == "agent":
+        success = run_agent_loop(build_log)
+        return 0 if success else 1
 
     try:
         analysis = analyze_build_log(build_log)
@@ -99,7 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         print("=" * 80)
         print(f"📁 Log File: {build_log.path}")
         print(f"📊 Stats: {build_log.character_count} characters, {build_log.line_count} lines")
-        print(f"🤖 Analysis Source: Gemini AI (Model: {settings.model})")
+        print(f"🤖 Analysis Source: Gemini AI (Model: {settings.gemini_model})")
         print("-" * 80)
         print(f"🚨 Failure Category: {category_name}")
         print(f"🎯 Confidence Level: {confidence_badge}")

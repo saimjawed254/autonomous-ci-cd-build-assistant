@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from urllib import error, request
 
-from .config import GeminiSettings
+from .config import Settings
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,19 +20,19 @@ class GeminiResponse:
 class GeminiClient:
     """Minimal Gemini REST client built on the Python standard library."""
 
-    def __init__(self, settings: GeminiSettings) -> None:
+    def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
     def is_configured(self) -> bool:
-        return bool(self._settings.api_key)
+        return bool(self._settings.gemini_api_key)
 
     def generate_json(self, *, system_prompt: str, user_prompt: str) -> GeminiResponse:
-        if not self._settings.api_key:
+        if not self._settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is not configured")
 
         url = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{self._settings.model}:generateContent?key={self._settings.api_key}"
+            f"{self._settings.gemini_model}:generateContent?key={self._settings.gemini_api_key}"
         )
         payload = {
             "systemInstruction": {
@@ -45,8 +45,8 @@ class GeminiClient:
                 }
             ],
             "generationConfig": {
-                "temperature": self._settings.temperature,
-                "maxOutputTokens": self._settings.max_output_tokens,
+                "temperature": self._settings.gemini_temperature,
+                "maxOutputTokens": self._settings.gemini_max_output_tokens,
                 "responseMimeType": "application/json",
                 "responseSchema": {
                     "type": "object",
@@ -101,7 +101,7 @@ class GeminiClient:
         )
 
         try:
-            with request.urlopen(http_request, timeout=self._settings.timeout_seconds) as response:
+            with request.urlopen(http_request, timeout=self._settings.gemini_timeout_seconds) as response:
                 raw_bytes = response.read()
         except error.URLError as exc:
             raise RuntimeError(f"Gemini request failed: {exc}") from exc

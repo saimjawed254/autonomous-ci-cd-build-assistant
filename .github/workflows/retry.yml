@@ -13,6 +13,6 @@ jobs:
       actions: write
     steps:
       - name: Rerun failed jobs
-        run: gh run rerun ${{ github.event.workflow_run.id }} --failed
+        run: gh run rerun ${{ github.event.workflow_run.id }} --failed --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}

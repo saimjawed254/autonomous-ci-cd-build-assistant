@@ -34,25 +34,25 @@ runs:
         python-version: '3.x'
 
     - name: Install dependencies
-      shell: pwsh
+      shell: bash
       run: |
         python -m pip install --upgrade pip
-        if (Test-Path "${{ github.action_path }}/requirements.txt") {
+        if [ -f "${{ github.action_path }}/requirements.txt" ]; then
           python -m pip install -r "${{ github.action_path }}/requirements.txt"
-        }
+        fi
 
     - name: Run Build Assistant
-      shell: pwsh
+      shell: bash
       run: |
-        $env:GEMINI_API_KEY = "${{ inputs.gemini-api-key }}"
-        $env:GEMINI_MODEL = "${{ inputs.gemini-model }}"
-        $env:GITHUB_TOKEN = "${{ inputs.github-token }}"
-        $env:GITHUB_REPOSITORY = "${{ github.repository }}"
-        $env:GITHUB_RUN_ID = "${{ github.run_id }}"
+        export GEMINI_API_KEY="${{ inputs.gemini-api-key }}"
+        export GEMINI_MODEL="${{ inputs.gemini-model }}"
+        export GITHUB_TOKEN="${{ inputs.github-token }}"
+        export GITHUB_REPOSITORY="${{ github.repository }}"
+        export GITHUB_RUN_ID="${{ github.run_id }}"
         
         # Pull Request event extraction
-        if ("${{ github.event_name }}" -eq "pull_request") {
-          $env:GITHUB_PR_NUMBER = "${{ github.event.number }}"
-        }
+        if [ "${{ github.event_name }}" = "pull_request" ]; then
+          export GITHUB_PR_NUMBER="${{ github.event.number }}"
+        fi
         
         python "${{ github.action_path }}/assistant.py" "${{ inputs.log-file }}" --mode "${{ inputs.mode }}"

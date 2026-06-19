@@ -1,4 +1,4 @@
-"""Configuration loading for the Gemini-backed Week 2 flow."""
+"""Configuration loading for the Gemini-backed CI build assistant."""
 
 from __future__ import annotations
 

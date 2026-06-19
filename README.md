@@ -1,6 +1,6 @@
 # AI-Powered CI/CD Build Assistant
 
-Week 2 of the CI/CD build assistant is now wired for Gemini-backed structured diagnosis only.
+CI/CD build assistant is now wired for Gemini-backed structured diagnosis only.
 
 ## Current Status
 

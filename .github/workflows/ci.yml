@@ -31,33 +31,23 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
       # -------------------------------------------------------------
-      # DEMONSTRATION STEP:
-      # This step intentionally fails under PR events to show the AI
-      # Build Assistant diagnosing the failure and attempting fix.
+      # RUN TESTS:
+      # Validates that all modules import correctly and runs linting.
+      # Output is captured so the AI Build Assistant can analyze on failure.
       # -------------------------------------------------------------
       - name: Run Tests
         id: test_step
         run: |
-          # Run validation smoke tests
-          python unwanted/week2-validation/validate_week2.py
-          
-          # Simulate build failure on pull requests
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "====================== FAILURES ======================"
-            echo "FAILED tests/test_parser.py::test_parse_empty_log - AssertionError: expected empty output"
-            echo "Error: Process completed with exit code 1."
-            exit 1
-          fi
-
-      # -------------------------------------------------------------
-      # SAVE LOG ON FAILURE:
-      # Captures stdout/stderr from the failed step into a log file.
-      # -------------------------------------------------------------
-      - name: Save Log on Failure
-        if: failure() && steps.test_step.outcome == 'failure'
-        run: |
-          echo "FAILED tests/test_parser.py::test_parse_empty_log - AssertionError: expected empty output" > build_failure.log
-          echo "Error: Process completed with exit code 1." >> build_failure.log
+          set -o pipefail
+          {
+            echo "=== Module Import Check ==="
+            python -c "from src.ci_build_assistant import parser, schema, config, analysis, agent; print('All modules imported successfully')"
+            echo ""
+            echo "=== Linting with Ruff ==="
+            ruff check src/ assistant.py --output-format text
+            echo ""
+            echo "All checks passed."
+          } 2>&1 | tee build_failure.log
 
       # -------------------------------------------------------------
       # RUN AI BUILD ASSISTANT:
@@ -71,5 +61,4 @@ jobs:
           log-file: 'build_failure.log'
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
           mode: 'agent'
-          github-token: ${{ secrets.PAT_TOKEN }}
 

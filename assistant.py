@@ -1,4 +1,4 @@
-"""Command-line entry point for the CI build assistant prototype."""
+"""Command-line entry point for the CI build assistant."""
 
 from __future__ import annotations
 
@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
 def _log_llm_error(exc: Exception) -> None:
     """Write Gemini failures to an ignored local log for debugging."""
 
-    log_dir = Path("unwanted") / "runtime-logs"
+    log_dir = Path(".build_assistant_logs")
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / "llm-errors.log"
     timestamp = datetime.now().isoformat(timespec="seconds")

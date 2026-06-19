@@ -10,3 +10,4 @@ dist/
 .vscode/
 unwanted/
 .build_assistant_history.json
+.build_assistant_logs/

@@ -38,7 +38,6 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
 
     token = settings.github_token
     repo = settings.github_repository
-    run_id = settings.github_run_id
     pr_number = settings.github_pr_number
 
     # Reconstruct past attempts from PR comments if available

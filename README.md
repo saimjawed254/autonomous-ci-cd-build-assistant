@@ -25,15 +25,16 @@ Open your existing CI workflow file (e.g. `.github/workflows/ci.yml`).
 
 You need to do two things:
 
-**A) Pipe your test output to a log file.** Modify your test step so the output is saved. For example:
+**A) Pipe your test output to a log file.** Modify your test step so the output is saved, and make sure `shell: bash` is explicitly set to ensure `pipefail` causes the step to fail:
 
 ```yaml
 - name: Run Tests
+  shell: bash
   run: |
     pytest 2>&1 | tee build_failure.log
 ```
 
-> The key part is `2>&1 | tee build_failure.log`. This captures both stdout and stderr into a file while still printing to the console. You can use this with any test command — `npm test`, `go test`, `cargo test`, etc.
+> **Crucial Tip:** Always set `shell: bash` when piping outputs on Linux/macOS. Without it, GitHub Actions runs with `bash -e` instead of `bash -eo pipefail`, meaning the step will incorrectly report success because `tee` exits with code 0 even if the test command fails. You can use this with any test command — `npm test`, `go test`, `cargo test`, etc.
 
 **B) Add the assistant step after your tests.** Place this right after your test step:
 
@@ -90,9 +91,22 @@ jobs:
 **Why a PAT?** GitHub blocks the default `GITHUB_TOKEN` from triggering other workflows (to prevent infinite loops). A Personal Access Token is needed so the retry chain works beyond a single rerun.
 
 To create the PAT:
-1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
-2. Generate a token with `repo` and `workflow` scopes
-3. Add it as a repository secret named `PAT_TOKEN`
+
+* **For Fine-grained PATs (Recommended):**
+  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
+  2. Click **Generate new token**. Select your repository (`ci-workflow-testing-2`).
+  3. Under **Repository permissions**, grant **Read and Write** access for:
+     * **Actions** (required to rerun workflows and trigger retries)
+     * **Contents** (required to read/write code and metadata)
+     * **Issues** & **Pull Requests** (required to fetch/post comment status)
+  4. Generate and save the token as a repository secret named `PAT_TOKEN`.
+
+* **For Tokens (Classic):**
+  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+  2. Generate a token with the following scopes:
+     * `repo` (grants read/write permissions for code, issues, and pull requests)
+     * `workflow` (grants permissions to manage and rerun workflow runs)
+  3. Add it as a repository secret named `PAT_TOKEN`.
 
 > Without a PAT, the retry will only fire once. With a PAT, it retries up to 3 times before the safety guardrail halts.
 
@@ -129,6 +143,7 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Run Tests
+        shell: bash
         run: pytest 2>&1 | tee build_failure.log
 
       - name: AI Build Assistant

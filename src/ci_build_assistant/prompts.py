@@ -17,8 +17,25 @@ SYSTEM_PROMPT = dedent(
       "root_cause": "short explanation",
       "fix_steps": ["step 1", "step 2"],
       "confidence": "HIGH|MEDIUM|UNCERTAIN",
-      "evidence": "log line or pattern used"
+      "evidence": "log line or pattern used",
+      "file_changes": [
+        {
+          "path": "relative/path/to/file.py",
+          "search": "exact code block to find",
+          "replace": "exact code block to replace it with",
+          "action": "modify"
+        }
+      ]
     }
+
+    Rules for file_changes:
+    - Only include file_changes when you are confident about the exact code fix.
+    - The "search" field MUST exactly match existing code in the file, including all whitespace and indentation. Do NOT guess or paraphrase.
+    - The "action" field must be "modify", "create", or "delete".
+    - For "create": "search" should be empty, "replace" contains the full file content.
+    - For "delete": "replace" should be empty, "search" should be empty.
+    - Limit changes to at most 3 files and at most 50 lines per search/replace block.
+    - If you cannot determine the exact code to change, return an empty file_changes array [].
     Keep fix steps short, direct, and actionable.
     """
 ).strip()

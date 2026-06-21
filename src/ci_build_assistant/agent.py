@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -10,8 +11,53 @@ from .config import load_settings
 from .parser import BuildLog
 from .memory import get_log_signature, get_past_attempts, record_attempt
 from .analysis import analyze_build_log
+from .schema import FileChange
 from .tools import post_pr_comment, get_pr_comments
 
+
+# ---------------------------------------------------------------------------
+# Diff preview helper
+# ---------------------------------------------------------------------------
+
+def generate_diff_preview(file_changes: tuple[FileChange, ...]) -> str:
+    """Render file changes as a GitHub-flavored markdown diff block."""
+
+    if not file_changes:
+        return ""
+
+    parts: list[str] = []
+    for fc in file_changes:
+        header = f"📄 `{fc.path}`"
+        if fc.action == "create":
+            header += " *(new file)*"
+        elif fc.action == "delete":
+            header += " *(delete file)*"
+
+        parts.append(header)
+        parts.append("```diff")
+
+        if fc.action == "delete":
+            for line in fc.search.splitlines():
+                parts.append(f"- {line}")
+        elif fc.action == "create":
+            for line in fc.replace.splitlines():
+                parts.append(f"+ {line}")
+        else:
+            # Modify: show removed lines then added lines
+            for line in fc.search.splitlines():
+                parts.append(f"- {line}")
+            for line in fc.replace.splitlines():
+                parts.append(f"+ {line}")
+
+        parts.append("```")
+        parts.append("")  # blank line between files
+
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Main agent loop
+# ---------------------------------------------------------------------------
 
 def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> bool:
     """Execute the autonomous CI/CD recovery agent loop.
@@ -21,7 +67,8 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     3. Safety Guardrails: Halt if consecutive retries >= 3.
     4. Reason: Call Gemini to obtain a diagnosis, avoiding past failed steps.
     5. Act:
-       - Post diagnosis details as a PR comment.
+       - Post diagnosis details as a PR comment with visual diff preview.
+       - Embed file_changes metadata for /apply-fix ChatOps trigger.
        - Save attempt status to local memory.
        - Re-run is handled by a separate retry workflow.
     """
@@ -49,6 +96,17 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
             for comment in comments:
                 matches = re.findall(r"<!--\s*build_assistant_metadata:\s*(.*?)\s*-->", comment)
                 for match in matches:
+                    # Try to parse as JSON metadata (new format)
+                    try:
+                        meta = json.loads(match)
+                        if isinstance(meta, dict) and meta.get("signature") == signature:
+                            sf = meta.get("suggested_fix", "")
+                            if sf:
+                                pr_attempts.append(sf)
+                        continue
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+                    # Fall back to legacy format: signature:fix_text
                     parts = match.split(":", 1)
                     if len(parts) == 2 and len(parts[0]) == 64 and all(c in "0123456789abcdef" for c in parts[0]):
                         if parts[0] == signature:
@@ -108,7 +166,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         record_attempt(history_file, signature, suggested_fix, "failed")
         return False
 
-    # Act Part A: Post PR Comment
+    # Act Part A: Post PR Comment with diff preview
     if pr_number:
         print(f"Posting diagnostic report comment to PR #{pr_number}...")
         comment_body = (
@@ -122,9 +180,24 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         )
         for idx, step in enumerate(diagnosis.fix_steps, 1):
             comment_body += f"{idx}. {step}\n"
-            
+
+        # Add diff preview if file changes are available
+        if diagnosis.file_changes:
+            diff_preview = generate_diff_preview(diagnosis.file_changes)
+            comment_body += f"\n---\n\n#### 📝 Suggested Code Changes:\n\n{diff_preview}\n"
+            comment_body += "\n💡 **To apply these changes automatically**, reply to this PR with:\n"
+            comment_body += "```\n/apply-fix\n```\n"
+
         comment_body += f"\n*Attempt #{len(past_attempts) + 1}. A re-run will be triggered automatically.*"
-        comment_body += f"\n<!-- build_assistant_metadata: {signature}:{suggested_fix} -->"
+
+        # Embed structured metadata for /apply-fix to consume
+        metadata = {
+            "signature": signature,
+            "suggested_fix": suggested_fix,
+            "file_changes": [fc.to_dict() for fc in diagnosis.file_changes],
+        }
+        metadata_json = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))
+        comment_body += f"\n<!-- build_assistant_metadata: {metadata_json} -->"
 
         try:
             post_pr_comment(repo, pr_number, comment_body, token)
@@ -138,3 +211,4 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     record_attempt(history_file, signature, suggested_fix, "running")
     print("Diagnosis complete. Re-run will be triggered by the retry workflow.")
     return True
+

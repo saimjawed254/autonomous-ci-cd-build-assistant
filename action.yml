@@ -7,8 +7,9 @@ branding:
 
 inputs:
   log-file:
-    description: 'Path to the build log file to analyze'
-    required: true
+    description: 'Path to the build log file to analyze (not required for apply-fix mode)'
+    required: false
+    default: 'none'
   gemini-api-key:
     description: 'API key for Google AI Studio'
     required: true
@@ -17,7 +18,7 @@ inputs:
     required: false
     default: 'gemini-3.1-flash-lite'
   mode:
-    description: 'Execution mode: "diagnose" (outputs dashboard report) or "agent" (attempts autonomous re-runs)'
+    description: 'Execution mode: "diagnose" (outputs dashboard report), "agent" (attempts autonomous re-runs), or "apply-fix" (apply suggested code changes from PR comments)'
     required: false
     default: 'agent'
   github-token:
@@ -53,6 +54,14 @@ runs:
         # Pull Request event extraction
         if [ "${{ github.event_name }}" = "pull_request" ]; then
           export GITHUB_PR_NUMBER="${{ github.event.number }}"
+        elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+          export GITHUB_PR_NUMBER="${{ github.event.issue.number }}"
         fi
         
-        python "${{ github.action_path }}/assistant.py" "${{ inputs.log-file }}" --mode "${{ inputs.mode }}"
+        # Build command based on mode
+        if [ "${{ inputs.mode }}" = "apply-fix" ]; then
+          python "${{ github.action_path }}/assistant.py" --mode "apply-fix"
+        else
+          python "${{ github.action_path }}/assistant.py" "${{ inputs.log-file }}" --mode "${{ inputs.mode }}"
+        fi
+

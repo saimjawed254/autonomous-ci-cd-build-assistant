@@ -12,7 +12,7 @@ from .config import load_settings
 from .llm_client import GeminiClient
 from .parser import BuildLog
 from .prompts import SYSTEM_PROMPT, build_user_prompt
-from .schema import FailureDiagnosis, FailureType
+from .schema import FailureDiagnosis, FailureType, FileChange
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +92,7 @@ def _diagnosis_from_payload(payload: dict[str, Any]) -> FailureDiagnosis:
     root_cause = _normalized_text(payload.get("root_cause"), default="Gemini did not provide a root cause.")
     evidence = _normalized_text(payload.get("evidence"), default="Gemini did not provide evidence.")
     fix_steps = _parse_fix_steps(payload.get("fix_steps"))
+    file_changes = _parse_file_changes(payload.get("file_changes"))
 
     return FailureDiagnosis(
         failure_type=failure_type,
@@ -103,6 +104,7 @@ def _diagnosis_from_payload(payload: dict[str, Any]) -> FailureDiagnosis:
         suggested_fix=_suggest_fix(fix_steps, root_cause),
         source="gemini",
         raw_model_output=json.dumps(payload, ensure_ascii=False),
+        file_changes=file_changes,
     )
 
 
@@ -130,6 +132,27 @@ def _normalized_text(value: Any, *, default: str) -> str:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return default
+
+
+def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
+    """Parse the file_changes array from the Gemini JSON payload."""
+
+    if not isinstance(value, list):
+        return ()
+    changes = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path", "").strip()
+        if not path:
+            continue
+        changes.append(FileChange(
+            path=path,
+            search=item.get("search", ""),
+            replace=item.get("replace", ""),
+            action=item.get("action", "modify").strip().lower(),
+        ))
+    return tuple(changes)
 
 
 def _suggest_fix(fix_steps: tuple[str, ...], root_cause: str) -> str:

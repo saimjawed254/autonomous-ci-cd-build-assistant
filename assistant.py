@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
+import subprocess
 import sys
 from pathlib import Path
 from datetime import datetime
 
 from src.ci_build_assistant import analyze_build_log, read_build_log, run_agent_loop
 from src.ci_build_assistant.config import load_settings
+from src.ci_build_assistant.tools import get_pr_comments, post_pr_comment
 
 
 FAILURE_TYPE_NAMES = {
@@ -34,8 +38,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "log_file",
+        nargs="?",
         type=Path,
-        help="Path to the build log text file.",
+        default=None,
+        help="Path to the build log text file (not required for apply-fix mode).",
     )
     parser.add_argument(
         "--json",
@@ -44,9 +50,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--mode",
-        choices=["diagnose", "agent"],
+        choices=["diagnose", "agent", "apply-fix"],
         default="diagnose",
-        help="Execution mode: 'diagnose' (default - print report) or 'agent' (observe and trigger active fixes).",
+        help="Execution mode: 'diagnose' (default), 'agent' (PR comments + retry), or 'apply-fix' (apply suggested code changes).",
     )
     return parser
 
@@ -61,6 +67,14 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # apply-fix mode does not need a log file
+    if args.mode == "apply-fix":
+        return _run_apply_fix()
+
+    if args.log_file is None:
+        print("Error: log_file is required for diagnose/agent modes.", file=sys.stderr)
+        return 1
 
     try:
         build_log = read_build_log(args.log_file)
@@ -140,6 +154,153 @@ def main(argv: list[str] | None = None) -> int:
     return 0
 
 
+# ---------------------------------------------------------------------------
+# Apply-fix mode
+# ---------------------------------------------------------------------------
+
+def _run_apply_fix() -> int:
+    """Fetch the most recent Build Assistant diagnosis from PR comments,
+    apply file changes, commit, and push back to the PR branch."""
+
+    settings = load_settings()
+    token = settings.github_token
+    repo = settings.github_repository
+    pr_number = settings.github_pr_number
+
+    if not token or not repo or not pr_number:
+        print("Error: GITHUB_TOKEN, GITHUB_REPOSITORY, and GITHUB_PR_NUMBER are all required for apply-fix mode.", file=sys.stderr)
+        return 1
+
+    print(f"🔧 Apply-fix mode: Fetching comments from {repo} PR #{pr_number}...")
+
+    try:
+        comments = get_pr_comments(repo, pr_number, token)
+    except Exception as exc:
+        print(f"Error: Failed to fetch PR comments: {exc}", file=sys.stderr)
+        return 1
+
+    # Find the most recent Build Assistant metadata comment (search from newest to oldest)
+    metadata = None
+    for comment in reversed(comments):
+        matches = re.findall(r"<!--\s*build_assistant_metadata:\s*(.*?)\s*-->", comment)
+        for match in matches:
+            try:
+                parsed = json.loads(match)
+                if isinstance(parsed, dict) and "file_changes" in parsed:
+                    metadata = parsed
+                    break
+            except (json.JSONDecodeError, ValueError):
+                continue
+        if metadata:
+            break
+
+    if not metadata:
+        print("Error: No Build Assistant diagnosis with file_changes found in PR comments.", file=sys.stderr)
+        print("Make sure the AI Build Assistant has posted a diagnosis comment with code change suggestions first.")
+        return 1
+
+    file_changes = metadata.get("file_changes", [])
+    if not file_changes:
+        print("Error: The most recent diagnosis comment has no file changes to apply.", file=sys.stderr)
+        return 1
+
+    print(f"Found {len(file_changes)} file change(s) to apply.")
+
+    # Apply each file change
+    root = Path.cwd()
+    applied_count = 0
+    for fc in file_changes:
+        file_path = root / fc["path"]
+        action = fc.get("action", "modify")
+        search = fc.get("search", "")
+        replace = fc.get("replace", "")
+
+        print(f"  📄 {action.upper()}: {fc['path']}")
+
+        if action == "create":
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(replace, encoding="utf-8")
+            applied_count += 1
+
+        elif action == "delete":
+            if file_path.exists():
+                file_path.unlink()
+                applied_count += 1
+            else:
+                print(f"    ⚠️ File not found, skipping delete: {fc['path']}")
+
+        elif action == "modify":
+            if not file_path.exists():
+                print(f"    ❌ File not found: {fc['path']}. Cannot apply modification.", file=sys.stderr)
+                continue
+
+            content = file_path.read_text(encoding="utf-8")
+            if search not in content:
+                print(f"    ❌ Search block not found in {fc['path']}.", file=sys.stderr)
+                print("    The code has changed since this fix was suggested. Please re-run the tests.", file=sys.stderr)
+                continue
+
+            new_content = content.replace(search, replace, 1)
+            file_path.write_text(new_content, encoding="utf-8")
+            applied_count += 1
+        else:
+            print(f"    ⚠️ Unknown action '{action}', skipping.")
+
+    if applied_count == 0:
+        print("❌ No file changes could be applied. Aborting.", file=sys.stderr)
+        return 1
+
+    print(f"\n✅ Applied {applied_count}/{len(file_changes)} file change(s).")
+
+    # Commit and push
+    try:
+        _git_commit_and_push(root, repo, token)
+    except Exception as exc:
+        print(f"Error: Git commit/push failed: {exc}", file=sys.stderr)
+        return 1
+
+    # Post a confirmation comment on the PR
+    try:
+        confirm_body = (
+            f"### ✅ AI Build Assistant — Fix Applied\n\n"
+            f"Applied **{applied_count}** code change(s) and pushed to this branch.\n"
+            f"A re-run of the CI pipeline should start automatically.\n"
+        )
+        post_pr_comment(repo, pr_number, confirm_body, token)
+    except Exception as exc:
+        print(f"Warning: Could not post confirmation comment: {exc}", file=sys.stderr)
+
+    print("🚀 Changes committed and pushed. CI will re-run automatically.")
+    return 0
+
+
+def _git_commit_and_push(root: Path, repo: str, token: str) -> None:
+    """Configure git identity and push applied changes."""
+
+    env = {**os.environ, "GIT_AUTHOR_NAME": "AI Build Assistant", "GIT_COMMITTER_NAME": "AI Build Assistant",
+           "GIT_AUTHOR_EMAIL": "github-actions[bot]@users.noreply.github.com",
+           "GIT_COMMITTER_EMAIL": "github-actions[bot]@users.noreply.github.com"}
+
+    def _run(cmd: list[str]) -> None:
+        result = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, env=env)
+        if result.returncode != 0:
+            raise RuntimeError(f"Command {' '.join(cmd)} failed: {result.stderr.strip()}")
+
+    _run(["git", "config", "user.name", "AI Build Assistant"])
+    _run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"])
+    _run(["git", "add", "-A"])
+
+    # Check if there are staged changes
+    status = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=str(root), capture_output=True)
+    if status.returncode == 0:
+        print("No changes detected after applying fixes (files may already be correct).")
+        return
+
+    _run(["git", "commit", "-m", "fix: apply AI Build Assistant suggested changes"])
+    _run(["git", "push"])
+    print("Git push completed successfully.")
+
+
 def _log_llm_error(exc: Exception) -> None:
     """Write Gemini failures to an ignored local log for debugging."""
 
@@ -153,4 +314,4 @@ def _log_llm_error(exc: Exception) -> None:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main())

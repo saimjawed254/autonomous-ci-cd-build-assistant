@@ -1,4 +1,4 @@
-"""Shared diagnosis schema for the Week 2 LLM-only flow."""
+"""Shared diagnosis schema for the CI build assistant."""
 
 from __future__ import annotations
 
@@ -23,6 +23,31 @@ class FailureType(str, Enum):
 
 
 @dataclass(frozen=True, slots=True)
+class FileChange:
+    """A single file edit suggested by the LLM.
+
+    Attributes:
+        path: Relative file path (e.g. ``src/math_utils.py``).
+        search: Exact code block to find in the file (empty for create/delete).
+        replace: Code block to replace it with (empty for delete).
+        action: One of ``"modify"``, ``"create"``, or ``"delete"``.
+    """
+
+    path: str
+    search: str
+    replace: str
+    action: str = "modify"
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "path": self.path,
+            "search": self.search,
+            "replace": self.replace,
+            "action": self.action,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class FailureDiagnosis:
     """Structured diagnosis payload returned to the CLI."""
 
@@ -35,6 +60,7 @@ class FailureDiagnosis:
     suggested_fix: str
     source: str = "gemini"
     raw_model_output: str | None = None
+    file_changes: tuple[FileChange, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the diagnosis to JSON-friendly data."""
@@ -49,4 +75,5 @@ class FailureDiagnosis:
             "suggested_fix": self.suggested_fix,
             "source": self.source,
             "raw_model_output": self.raw_model_output,
+            "file_changes": [fc.to_dict() for fc in self.file_changes],
         }

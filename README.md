@@ -156,14 +156,58 @@ jobs:
 
 ---
 
+### Step 3 (Optional): Enable One-Click Code Fixes
+
+When the assistant diagnoses a failure, it can also suggest **exact code changes** shown as a visual diff in the PR comment. To apply these changes with one click, add a third workflow file.
+
+Create `.github/workflows/apply-fix.yml` in your repo:
+
+```yaml
+name: Apply AI Suggestion
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  apply:
+    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/apply-fix' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.PAT_TOKEN }}
+          ref: refs/pull/${{ github.event.issue.number }}/head
+
+      - name: Apply AI Fix
+        uses: saimjawed254/accenture-intern-assignment@main
+        with:
+          mode: 'apply-fix'
+          gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.PAT_TOKEN }}
+```
+
+**How it works:**
+1. The AI Build Assistant posts a diagnosis comment with a visual code diff.
+2. You review the suggested changes directly in the PR comment.
+3. If you approve, reply with `/apply-fix`.
+4. The workflow checks out your PR branch, applies the code changes, commits, and pushes — triggering a new CI run automatically.
+
+> This keeps a **human in the loop** at all times. No code is changed without your explicit approval.
+
+---
+
 ## Action Inputs
 
 | Input | Required | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `log-file` | Yes | — | Path to the build log file |
+| `log-file` | No | `none` | Path to the build log file (not needed for `apply-fix` mode) |
 | `gemini-api-key` | Yes | — | Your Gemini API key |
 | `gemini-model` | No | `gemini-3.1-flash-lite` | Gemini model to use |
-| `mode` | No | `agent` | `agent` (PR comments + retry) or `diagnose` (log output only) |
+| `mode` | No | `agent` | `agent` (PR comments + retry), `diagnose` (log output only), or `apply-fix` (apply suggested code changes) |
 | `github-token` | No | `github.token` | Token for PR commenting (auto-provided by GitHub) |
 
 ---
@@ -172,10 +216,11 @@ jobs:
 
 1. **Your tests fail** → the build log is captured to a file.
 2. **The assistant reads the log** and sends it to Gemini for analysis.
-3. **Gemini returns a structured diagnosis**: failure category, root cause, confidence level, and fix steps.
-4. **A comment is posted on your PR** with the diagnosis and suggested fix.
-5. **If auto-retry is enabled**, the failed build is rerun automatically (up to 3 times).
-6. **Safety guardrail**: After 3 failed attempts, the assistant stops retrying to prevent runaway costs. It tracks past attempts using hidden metadata in PR comments so it never suggests the same fix twice.
+3. **Gemini returns a structured diagnosis**: failure category, root cause, confidence level, fix steps, and **exact code changes**.
+4. **A comment is posted on your PR** with the diagnosis, a visual Git-style diff of the suggested fix, and instructions to apply it.
+5. **You review the diff** and reply with `/apply-fix` to approve — the assistant commits and pushes the changes automatically.
+6. **If auto-retry is enabled**, the failed build is rerun automatically (up to 3 times).
+7. **Safety guardrail**: After 3 failed attempts, the assistant stops retrying to prevent runaway costs. It tracks past attempts using hidden metadata in PR comments so it never suggests the same fix twice.
 
 If Gemini is unavailable (API down, key missing, timeout), the assistant falls back to a built-in rule-based classifier that diagnoses common errors offline — your pipeline never crashes because of the assistant.
 

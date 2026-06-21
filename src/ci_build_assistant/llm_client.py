@@ -73,6 +73,19 @@ class GeminiClient:
                         },
                         "confidence": {"type": "string"},
                         "evidence": {"type": "string"},
+                        "file_changes": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "path": {"type": "string"},
+                                    "search": {"type": "string"},
+                                    "replace": {"type": "string"},
+                                    "action": {"type": "string"},
+                                },
+                                "required": ["path", "search", "replace", "action"],
+                            },
+                        },
                     },
                     "required": [
                         "failure_type",
@@ -87,6 +100,7 @@ class GeminiClient:
                         "fix_steps",
                         "confidence",
                         "evidence",
+                        "file_changes",
                     ],
                 },
             },

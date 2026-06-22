@@ -13,7 +13,7 @@ from datetime import datetime
 
 from src.ci_build_assistant import analyze_build_log, read_build_log, run_agent_loop
 from src.ci_build_assistant.config import load_settings
-from src.ci_build_assistant.tools import get_pr_comments, post_pr_comment
+from src.ci_build_assistant.tools import get_pr_comments, post_pr_comment, get_pr_branch
 
 
 FAILURE_TYPE_NAMES = {
@@ -252,9 +252,16 @@ def _run_apply_fix() -> int:
 
     print(f"\n✅ Applied {applied_count}/{len(file_changes)} file change(s).")
 
+    # Fetch PR branch name to push to the correct branch from detached HEAD
+    try:
+        branch = get_pr_branch(repo, pr_number, token)
+    except Exception as exc:
+        print(f"Error: Failed to fetch PR branch name: {exc}", file=sys.stderr)
+        return 1
+
     # Commit and push
     try:
-        _git_commit_and_push(root, repo, token)
+        _git_commit_and_push(root, repo, token, branch)
     except Exception as exc:
         print(f"Error: Git commit/push failed: {exc}", file=sys.stderr)
         return 1
@@ -274,7 +281,7 @@ def _run_apply_fix() -> int:
     return 0
 
 
-def _git_commit_and_push(root: Path, repo: str, token: str) -> None:
+def _git_commit_and_push(root: Path, repo: str, token: str, branch: str) -> None:
     """Configure git identity and push applied changes."""
 
     env = {**os.environ, "GIT_AUTHOR_NAME": "AI Build Assistant", "GIT_COMMITTER_NAME": "AI Build Assistant",
@@ -297,7 +304,7 @@ def _git_commit_and_push(root: Path, repo: str, token: str) -> None:
         return
 
     _run(["git", "commit", "-m", "fix: apply AI Build Assistant suggested changes"])
-    _run(["git", "push"])
+    _run(["git", "push", "origin", f"HEAD:{branch}"])
     print("Git push completed successfully.")
 
 

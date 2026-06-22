@@ -46,6 +46,7 @@ SYSTEM_PROMPT = dedent(
     Rules for file_changes:
     - Prioritize providing exact code fixes in "file_changes" whenever possible, especially for test assertion mismatches, compilation errors, and simple code bugs that are visible in stack traces.
     - If the log shows a test assertion failing (e.g. expected value vs received value), prioritize suggesting the code fix that updates the assertion or test to pass in the CI environment.
+    - For missing dependencies (e.g., module not found, failed to load url), suggest adding the missing package to package.json (or requirements.txt) under dependencies with a suitable version constraint (e.g., "^1.0.0"), or suggest removing the invalid import statement if it is not used.
     - The "search" field MUST exactly match existing code in the file, including all whitespace and indentation. Do NOT guess or paraphrase.
     - The "action" field must be "modify", "create", or "delete".
     - For "create": "search" should be empty, "replace" contains the full file content.

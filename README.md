@@ -134,9 +134,9 @@ To create the PAT:
 
 ---
 
-## Full Example
+## Minimal Workflow Template (Language-Agnostic)
 
-Here is a complete CI workflow for a Python project using pytest:
+Here is a complete, language-agnostic workflow template you can copy directly into `.github/workflows/ci.yml`. You can customize the setup steps and test commands for any language (Node.js, Go, Python, Rust, Java, etc.):
 
 ```yaml
 name: CI Check
@@ -155,19 +155,28 @@ jobs:
       pull-requests: write
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+      # -------------------------------------------------------------
+      # 1. [OPTIONAL] SETUP ENVIRONMENT & RUNTIMES
+      # Add setup steps for your language here if needed.
+      # Examples: actions/setup-node, actions/setup-python, actions/setup-go, etc.
+      # -------------------------------------------------------------
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
+      # -------------------------------------------------------------
+      # 2. RUN TESTS & PIPE LOGS
+      # Replace 'YOUR_TEST_COMMAND' with: npm test, pytest, cargo test, etc.
+      # -------------------------------------------------------------
       - name: Run Tests
         shell: bash
-        run: pytest 2>&1 | tee build_failure.log
+        run: |
+          YOUR_TEST_COMMAND 2>&1 | tee build_failure.log
 
+      # -------------------------------------------------------------
+      # 3. RUN AI BUILD ASSISTANT
+      # Diagnoses the build log file created above on failure.
+      # -------------------------------------------------------------
       - name: AI Build Assistant
         if: failure()
         uses: saimjawed254/accenture-intern-assignment@main

@@ -171,7 +171,7 @@ on:
 
 jobs:
   apply:
-    if: ${{ github.event.issue.pull_request && github.event.comment.body == '/apply-fix' }}
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/apply-fix') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

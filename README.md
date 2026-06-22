@@ -24,7 +24,7 @@ Add it as a repository secret:
 Open your existing CI workflow file (e.g. `.github/workflows/ci.yml`).
 
 > [!NOTE]
-> **Don't have a CI workflow yet?** Simply create a new file named `.github/workflows/ci.yml` in your repository, and copy-paste the [Full Example](#full-example) template below as your starting point.
+> **Don't have a CI workflow yet?** Simply create a new file named `.github/workflows/ci.yml` in your repository, and copy-paste the [Minimal Workflow Template](#minimal-workflow-template-language-agnostic) below as your starting point.
 
 You need to do two things:
 

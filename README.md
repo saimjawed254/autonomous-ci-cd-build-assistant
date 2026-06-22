@@ -80,7 +80,25 @@ jobs:
     permissions:
       actions: write
     steps:
+      - name: Check if failure is transient
+        id: check_transient
+        run: |
+          # Download transient status artifact
+          gh run download ${{ github.event.workflow_run.id }} -n transient-status --dir . || echo "No transient status found"
+          
+          # Read and evaluate transient status (e.g. network timeout, OOM, disk full)
+          if [ -f transient_status.txt ] && [ "$(cat transient_status.txt)" = "true" ]; then
+            echo "is_transient=true" >> $GITHUB_OUTPUT
+            echo "Transient failure detected. Proceeding with rerun."
+          else
+            echo "is_transient=false" >> $GITHUB_OUTPUT
+            echo "Non-transient or unknown failure. Skipping auto-retry."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
       - name: Rerun failed jobs
+        if: steps.check_transient.outputs.is_transient == 'true'
         run: gh run rerun ${{ github.event.workflow_run.id }} --failed --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ secrets.PAT_TOKEN }}
@@ -96,9 +114,10 @@ To create the PAT:
   1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
   2. Click **Generate new token**. Select your repository (`ci-workflow-testing-2`).
   3. Under **Repository permissions**, grant **Read and Write** access for:
-     * **Actions** (required to rerun workflows and trigger retries)
-     * **Contents** (required to read/write code and metadata)
-     * **Issues** & **Pull Requests** (required to fetch/post comment status)
+      * **Actions** (required to rerun workflows and trigger retries)
+      * **Contents: Read and Write** (CRITICAL: required to commit and push code changes)
+      * **Issues** & **Pull Requests** (required to fetch and post comments)
+      * **Workflows** (required to execute workflow runs)
   4. Generate and save the token as a repository secret named `PAT_TOKEN`.
 
 * **For Tokens (Classic):**

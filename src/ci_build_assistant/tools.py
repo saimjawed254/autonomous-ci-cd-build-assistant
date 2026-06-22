@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from urllib import error, request
 
 
@@ -101,4 +102,35 @@ def get_pr_branch(repo: str, pr_number: int, token: str) -> str:
         raise RuntimeError(f"Failed to parse PR branch details response: {exc}") from exc
 
     raise RuntimeError("PR branch name not found in GitHub response.")
+
+
+def post_comment_reaction(repo: str, comment_id: int, token: str, content: str = "eyes") -> None:
+    """Post an emoji reaction to a GitHub comment to show that processing has started."""
+
+    url = f"https://api.github.com/repos/{repo}/issues/comments/{comment_id}/reactions"
+    payload = {"content": content}
+    body = json.dumps(payload).encode("utf-8")
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github.add-reactions+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "CI-Build-Assistant",
+        "Content-Type": "application/json",
+    }
+
+    http_request = request.Request(
+        url,
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=10) as response:
+            response.read()
+    except Exception as exc:
+        # Ignore errors so the main action doesn't fail just because reaction failed
+        print(f"Warning: Failed to post comment reaction: {exc}", file=sys.stderr)
+
 

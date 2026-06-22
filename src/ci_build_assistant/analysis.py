@@ -135,22 +135,43 @@ def _normalized_text(value: Any, *, default: str) -> str:
 
 
 def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
-    """Parse the file_changes array from the Gemini JSON payload."""
+    """Parse the file_changes array from the Gemini JSON payload, enforcing safety limits."""
 
     if not isinstance(value, list):
         return ()
     changes = []
+    total_lines = 0
     for item in value:
         if not isinstance(item, dict):
             continue
         path = item.get("path", "").strip()
         if not path:
             continue
+            
+        search = item.get("search", "")
+        replace = item.get("replace", "")
+        action = item.get("action", "modify").strip().lower()
+
+        # Count lines in search and replace blocks
+        search_lines = search.count("\n") + 1 if search else 0
+        replace_lines = replace.count("\n") + 1 if replace else 0
+
+        # Enforce max 50 lines per block
+        if search_lines > 50 or replace_lines > 50:
+            print("Warning: Suggested file change block is too large (> 50 lines), skipping auto-fix suggestion.", file=sys.stderr)
+            return ()
+
+        total_lines += max(search_lines, replace_lines)
+        # Enforce max 150 lines cumulative across all changes
+        if total_lines > 150:
+            print("Warning: Total suggested file changes are too large (> 150 lines), skipping auto-fix suggestion.", file=sys.stderr)
+            return ()
+
         changes.append(FileChange(
             path=path,
-            search=item.get("search", ""),
-            replace=item.get("replace", ""),
-            action=item.get("action", "modify").strip().lower(),
+            search=search,
+            replace=replace,
+            action=action,
         ))
     return tuple(changes)
 

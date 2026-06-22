@@ -13,7 +13,7 @@ from datetime import datetime
 
 from src.ci_build_assistant import analyze_build_log, read_build_log, run_agent_loop
 from src.ci_build_assistant.config import load_settings
-from src.ci_build_assistant.tools import get_pr_comments, post_pr_comment, get_pr_branch
+from src.ci_build_assistant.tools import get_pr_comments, post_pr_comment, get_pr_branch, post_comment_reaction
 
 
 FAILURE_TYPE_NAMES = {
@@ -96,6 +96,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"LLM analysis error: {exc}", file=sys.stderr)
         return 1
 
+    # Write transient status to file for retry workflow to consume
+    try:
+        transient_types = {"network_timeout", "oom_error", "disk_full", "permission_denied", "unknown"}
+        is_transient = analysis.diagnosis.failure_type.value in transient_types
+        Path("transient_status.txt").write_text("true" if is_transient else "false", encoding="utf-8")
+    except Exception as exc:
+        print(f"Warning: Could not write transient status: {exc}", file=sys.stderr)
+
     if args.json:
         # Match previous output shape for JSON integrations
         print(f"Log file: {build_log.path}")
@@ -170,6 +178,16 @@ def _run_apply_fix() -> int:
     if not token or not repo or not pr_number:
         print("Error: GITHUB_TOKEN, GITHUB_REPOSITORY, and GITHUB_PR_NUMBER are all required for apply-fix mode.", file=sys.stderr)
         return 1
+
+    # Post a 👀 reaction immediately to the triggering comment if GITHUB_COMMENT_ID is set
+    comment_id_str = os.getenv("GITHUB_COMMENT_ID")
+    if comment_id_str:
+        try:
+            comment_id = int(comment_id_str)
+            print(f"Adding 👀 reaction to triggering comment #{comment_id}...")
+            post_comment_reaction(repo, comment_id, token, "eyes")
+        except Exception as exc:
+            print(f"Warning: Failed to add start reaction: {exc}", file=sys.stderr)
 
     print(f"🔧 Apply-fix mode: Fetching comments from {repo} PR #{pr_number}...")
 

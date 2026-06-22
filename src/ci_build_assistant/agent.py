@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -99,10 +100,17 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
                     # Try to parse as JSON metadata (new format)
                     try:
                         meta = json.loads(match)
-                        if isinstance(meta, dict) and meta.get("signature") == signature:
-                            sf = meta.get("suggested_fix", "")
-                            if sf:
-                                pr_attempts.append(sf)
+                        if isinstance(meta, dict):
+                            match_sig = meta.get("signature") == signature
+                            match_sha = False
+                            current_sha = os.environ.get("GITHUB_SHA")
+                            if current_sha and meta.get("commit_sha") == current_sha:
+                                match_sha = True
+                            
+                            if match_sig or match_sha:
+                                sf = meta.get("suggested_fix", "")
+                                if sf:
+                                    pr_attempts.append(sf)
                         continue
                     except (json.JSONDecodeError, ValueError):
                         pass
@@ -143,6 +151,14 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     except Exception as exc:
         print(f"Agent loop reasoning failed: {exc}", file=sys.stderr)
         return False
+
+    # Write transient status to file for retry workflow to consume
+    try:
+        transient_types = {"network_timeout", "oom_error", "disk_full", "permission_denied", "unknown"}
+        is_transient = analysis.diagnosis.failure_type.value in transient_types
+        (root / "transient_status.txt").write_text("true" if is_transient else "false", encoding="utf-8")
+    except Exception as exc:
+        print(f"Warning: Could not write transient status: {exc}", file=sys.stderr)
 
     diagnosis = analysis.diagnosis
     suggested_fix = diagnosis.suggested_fix
@@ -194,6 +210,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         metadata = {
             "signature": signature,
             "suggested_fix": suggested_fix,
+            "commit_sha": os.environ.get("GITHUB_SHA", ""),
             "file_changes": [fc.to_dict() for fc in diagnosis.file_changes],
         }
         metadata_json = json.dumps(metadata, ensure_ascii=False, separators=(",", ":"))

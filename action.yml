@@ -56,6 +56,7 @@ runs:
           export GITHUB_PR_NUMBER="${{ github.event.number }}"
         elif [ "${{ github.event_name }}" = "issue_comment" ]; then
           export GITHUB_PR_NUMBER="${{ github.event.issue.number }}"
+          export GITHUB_COMMENT_ID="${{ github.event.comment.id }}"
         fi
         
         # Build command based on mode
@@ -64,4 +65,13 @@ runs:
         else
           python "${{ github.action_path }}/assistant.py" "${{ inputs.log-file }}" --mode "${{ inputs.mode }}"
         fi
+
+    - name: Upload transient status
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: transient-status
+        path: transient_status.txt
+        retention-days: 1
+        if-no-files-found: ignore
 

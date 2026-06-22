@@ -66,4 +66,4 @@ def build_user_prompt(build_log: BuildLog, past_attempts: list[str] | None = Non
 def _build_excerpt(content: str, limit: int = 4000) -> str:
     if len(content) <= limit:
         return content
-    return content[:limit] + "\n...[truncated]..."
+    return "...[truncated]...\n" + content[-limit:]

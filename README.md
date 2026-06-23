@@ -37,6 +37,7 @@ You need to do two things:
     pytest 2>&1 | tee build_failure.log
 ```
 
+> [!TIP]
 > **Crucial Tip:** Always set `shell: bash` when piping outputs on Linux/macOS. Without it, GitHub Actions runs with `bash -e` instead of `bash -eo pipefail`, meaning the step will incorrectly report success because `tee` exits with code 0 even if the test command fails. You can use this with any test command — `npm test`, `go test`, `cargo test`, etc.
 
 **B) Add the assistant step after your tests.** Place this right after your test step:
@@ -59,78 +60,6 @@ permissions:
   contents: write
   pull-requests: write
 ```
-
----
-
-### Step 2 (Optional): Enable Auto-Retry
-
-By default, the assistant only diagnoses and comments. If you want it to also **automatically retry failed builds** (up to 3 attempts), add a second workflow file.
-
-Create `.github/workflows/retry.yml` in your repo with this content:
-
-```yaml
-name: Auto-Retry Failed Builds
-
-on:
-  workflow_run:
-    workflows: ["YOUR_CI_WORKFLOW_NAME"]  # Replace with your CI workflow's name
-    types: [completed]
-
-jobs:
-  retry:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3 }}
-    permissions:
-      actions: write
-    steps:
-      - name: Check if failure is transient
-        id: check_transient
-        run: |
-          # Download transient status artifact
-          gh run download ${{ github.event.workflow_run.id }} -n transient-status --dir . || echo "No transient status found"
-          
-          # Read and evaluate transient status (e.g. network timeout, OOM, disk full)
-          if [ -f transient_status.txt ] && [ "$(cat transient_status.txt)" = "true" ]; then
-            echo "is_transient=true" >> $GITHUB_OUTPUT
-            echo "Transient failure detected. Proceeding with rerun."
-          else
-            echo "is_transient=false" >> $GITHUB_OUTPUT
-            echo "Non-transient or unknown failure. Skipping auto-retry."
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-
-      - name: Rerun failed jobs
-        if: steps.check_transient.outputs.is_transient == 'true'
-        run: gh run rerun ${{ github.event.workflow_run.id }} --failed --repo ${{ github.repository }}
-        env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
-```
-
-**Replace `YOUR_CI_WORKFLOW_NAME`** with the exact `name:` from your CI workflow file (e.g. `"CI Check"` or `"Build and Test"`).
-
-**Why a PAT?** GitHub blocks the default `GITHUB_TOKEN` from triggering other workflows (to prevent infinite loops). A Personal Access Token is needed so the retry chain works beyond a single rerun.
-
-To create the PAT:
-
-* **For Fine-grained PATs (Recommended):**
-  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
-  2. Click **Generate new token**. Select your repository (`ci-workflow-testing-2`).
-  3. Under **Repository permissions**, grant **Read and Write** access for:
-      * **Actions** (required to rerun workflows and trigger retries)
-      * **Contents: Read and Write** (CRITICAL: required to commit and push code changes)
-      * **Issues** & **Pull Requests** (required to fetch and post comments)
-      * **Workflows** (required to execute workflow runs)
-  4. Generate and save the token as a repository secret named `PAT_TOKEN`.
-
-* **For Tokens (Classic):**
-  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
-  2. Generate a token with the following scopes:
-     * `repo` (grants read/write permissions for code, issues, and pull requests)
-     * `workflow` (grants permissions to manage and rerun workflow runs)
-  3. Add it as a repository secret named `PAT_TOKEN`.
-
-> Without a PAT, the retry will only fire once. With a PAT, it retries up to 3 times before the safety guardrail halts.
 
 ---
 
@@ -187,11 +116,92 @@ jobs:
 
 ---
 
+### Step 2 (Optional): Enable Auto-Retry
+
+By default, the assistant only diagnoses and comments. If you want it to also **automatically retry failed builds** (up to 3 attempts), add a second workflow file.
+
+Create `.github/workflows/retry.yml` in your repo with this content:
+
+> [!WARNING]
+> This file must be in `.github/workflows/` (with a leading dot).
+
+```yaml
+name: Auto-Retry Failed Builds
+
+on:
+  workflow_run:
+    workflows: ["YOUR_CI_WORKFLOW_NAME"]  # Replace with your CI workflow's name
+    types: [completed]
+
+jobs:
+  retry:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt < 3 }}
+    permissions:
+      actions: write
+    steps:
+      - name: Check if failure is transient
+        id: check_transient
+        run: |
+          # Download transient status artifact
+          gh run download ${{ github.event.workflow_run.id }} -n transient-status --dir . || echo "No transient status found"
+          
+          # Read and evaluate transient status (e.g. network timeout, OOM, disk full)
+          if [ -f transient_status.txt ] && [ "$(cat transient_status.txt)" = "true" ]; then
+            echo "is_transient=true" >> $GITHUB_OUTPUT
+            echo "Transient failure detected. Proceeding with rerun."
+          else
+            echo "is_transient=false" >> $GITHUB_OUTPUT
+            echo "Non-transient or unknown failure. Skipping auto-retry."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+
+      - name: Rerun failed jobs
+        if: steps.check_transient.outputs.is_transient == 'true'
+        run: gh run rerun ${{ github.event.workflow_run.id }} --failed --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+```
+
+**Replace `YOUR_CI_WORKFLOW_NAME`** with the exact `name:` from your CI workflow file (e.g. `"CI Check"` or `"Build and Test"`).
+
+**Why a PAT?** GitHub blocks the default `GITHUB_TOKEN` from triggering other workflows (to prevent infinite loops). A Personal Access Token is needed so the retry chain works beyond a single rerun.
+
+To create the PAT:
+
+* **For Fine-grained PATs (Recommended):**
+  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Fine-grained tokens**
+  2. Click **Generate new token**. Select your repository.
+  3. Under **Repository permissions**, grant **Read and Write** access for:
+      * **Actions** (required to rerun workflows and trigger retries)
+      * **Contents** (CRITICAL: required to commit and push code changes)
+      * **Issues** & **Pull Requests** (required to fetch and post comments)
+      * **Workflows** (required to execute workflow runs)
+  4. Generate and save the token as a repository secret named `PAT_TOKEN`.
+
+* **For Tokens (Classic):**
+  1. Go to GitHub → **Settings** → **Developer settings** → **Personal access tokens** → **Tokens (classic)**
+  2. Generate a token with the following scopes:
+     * `repo` (grants read/write permissions for code, issues, and pull requests)
+     * `workflow` (grants permissions to manage and rerun workflow runs)
+  3. Add it as a repository secret named `PAT_TOKEN`.
+
+> Without a PAT, the retry will only fire once. With a PAT, it retries up to 3 times before the safety guardrail halts.
+
+---
+
 ### Step 3 (Optional): Enable One-Click Code Fixes
 
 When the assistant diagnoses a failure, it can also suggest **exact code changes** shown as a visual diff in the PR comment. To apply these changes with one click, add a third workflow file.
 
 Create `.github/workflows/apply-fix.yml` in your repo:
+
+> [!CAUTION]
+> **CRITICAL SETUP RULES:**
+> 1. **Location:** This file **MUST** be placed exactly in the `.github/workflows/` folder. It will **not** work if placed in `workflows/`, `.github/`, or the root directory. 
+>    *(Note: You might notice our action's definition file `action.yml` is in the root of our repository. That's required for creating a reusable GitHub Action, but your workflow files that use the action must always go in `.github/workflows/`)*
+> 2. **Branch:** The `apply-fix.yml` file **MUST be committed to your default branch** (e.g., `main`). If you only commit this file to a feature branch or PR branch, GitHub Actions will **not** trigger it when you reply `/apply-fix`. This is because the `issue_comment` event only listens for workflows on the repository's default branch.
 
 ```yaml
 name: Apply AI Suggestion

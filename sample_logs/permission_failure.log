@@ -1,4 +1,0 @@
-[INFO] Authenticating git push to origin main...
-remote: Permission to saimjawed254/accenture-intern-assignment.git denied to deploy-bot.
-fatal: unable to access 'https://github.com/saimjawed254/accenture-intern-assignment.git/': The requested URL returned error: 403
-Error: Git push command failed.

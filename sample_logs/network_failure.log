@@ -1,4 +1,0 @@
-[INFO] Downloading dependency package matrix...
-curl: (28) Connection timed out after 30001 milliseconds
-Error: Failed to fetch updates from external mirror server: Connection timed out.
-Error: Process completed with exit code 1.

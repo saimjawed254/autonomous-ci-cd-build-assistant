@@ -1,5 +1,0 @@
-Run actions/checkout@v4
-Run actions/setup-python@v5
-Error: .github/workflows/ci.yml (Line: 12, Col: 9): Unrecognized named-value: 'env'
-Error: The workflow is not valid. .github/workflows/ci.yml
-Process completed with exit code 1.

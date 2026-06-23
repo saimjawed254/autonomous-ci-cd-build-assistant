@@ -1,8 +1,0 @@
-[INFO] Compiling sources...
-src/main.rs:12:24
-   |
-12 |     let user_name = user.get_name();
-   |                          ^^^^^^^^ method not found in `User`
-   |
-error: aborting due to previous error
-Error: Cargo build failed with compile error.

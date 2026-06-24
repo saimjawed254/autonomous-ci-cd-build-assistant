@@ -265,8 +265,6 @@ When adding this Action to your custom workflow files, you can configure these i
 6. **If auto-retry is enabled**, the failed build is rerun automatically (up to 3 times).
 7. **Safety guardrail**: After 3 failed attempts, the assistant stops retrying to prevent runaway costs. It tracks past attempts using hidden metadata in PR comments so it never suggests the same fix twice.
 
-If Gemini is unavailable (API down, key missing, timeout), the assistant falls back to a built-in rule-based classifier that diagnoses common errors offline — your pipeline never crashes because of the assistant.
-
 ---
 
 ## Local CLI Usage

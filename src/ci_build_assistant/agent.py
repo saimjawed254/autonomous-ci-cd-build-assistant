@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .classifier import classify_failure
 from .core import (
     BuildLog,
     FailureDiagnosis,
@@ -48,40 +47,26 @@ class AnalysisResult:
 
 
 def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = None) -> AnalysisResult:
-    """Analyze a build log using Gemini with a rule-based fallback."""
+    """Analyze a build log using Gemini."""
 
     settings = load_settings()
     client = GeminiClient(settings)
     llm_enabled = client.is_configured()
 
-    if llm_enabled:
-        try:
-            user_prompt = build_user_prompt(build_log, past_attempts)
-            response = client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
-            diagnosis = _parse_llm_response(response.text)
-            return AnalysisResult(
-                diagnosis=diagnosis,
-                used_llm=True,
-                llm_enabled=True,
-            )
-        except Exception as exc:
-            print(f"Warning: Gemini analysis failed ({exc}). Falling back to rule-based classifier.", file=sys.stderr)
-            diagnosis = classify_failure(build_log)
-            return AnalysisResult(
-                diagnosis=diagnosis,
-                used_llm=False,
-                llm_enabled=True,
-                error_message=str(exc),
-            )
-    else:
-        print("Warning: GEMINI_API_KEY is not configured. Falling back to rule-based classifier.", file=sys.stderr)
-        diagnosis = classify_failure(build_log)
+    if not llm_enabled:
+        raise RuntimeError("GEMINI_API_KEY is not configured")
+
+    try:
+        user_prompt = build_user_prompt(build_log, past_attempts)
+        response = client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
+        diagnosis = _parse_llm_response(response.text)
         return AnalysisResult(
             diagnosis=diagnosis,
-            used_llm=False,
-            llm_enabled=False,
-            error_message="GEMINI_API_KEY not set",
+            used_llm=True,
+            llm_enabled=True,
         )
+    except Exception as exc:
+        raise RuntimeError(f"Gemini analysis failed: {exc}") from exc
 
 
 def _parse_llm_response(text: str) -> FailureDiagnosis:

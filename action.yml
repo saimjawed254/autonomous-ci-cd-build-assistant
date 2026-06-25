@@ -31,6 +31,8 @@ runs:
   steps:
     - name: Set up Python
       uses: actions/setup-python@v5
+      env:
+        ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       with:
         python-version: '3.x'
 
@@ -69,6 +71,8 @@ runs:
     - name: Upload transient status
       if: always()
       uses: actions/upload-artifact@v4
+      env:
+        ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       with:
         name: transient-status
         path: transient_status.txt

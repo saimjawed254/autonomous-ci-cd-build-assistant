@@ -392,3 +392,37 @@ def post_comment_reaction(repo: str, comment_id: int, token: str, content: str =
             response.read()
     except Exception as exc:
         print(f"Warning: Failed to post comment reaction: {exc}", file=sys.stderr)
+
+
+def get_pr_changed_files(repo: str, pr_number: int, token: str) -> list[str]:
+    """Retrieve the list of file paths changed in a Pull Request."""
+
+    url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files?per_page=100"
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "CI-Build-Assistant",
+    }
+
+    http_request = request.Request(
+        url,
+        headers=headers,
+        method="GET",
+    )
+
+    try:
+        with request.urlopen(http_request, timeout=15) as response:
+            raw_bytes = response.read()
+    except error.URLError as exc:
+        raise RuntimeError(f"Failed to fetch PR changed files: {exc}") from exc
+
+    try:
+        files_list = json.loads(raw_bytes.decode("utf-8"))
+        if isinstance(files_list, list):
+            return [str(f.get("filename", "")) for f in files_list if f.get("filename")]
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    return []

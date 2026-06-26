@@ -8,6 +8,7 @@ from .core import (
     get_pr_branch,
     get_pr_comments,
     load_settings,
+    get_pr_changed_files,
     post_comment_reaction,
     post_pr_comment,
     read_build_log,
@@ -33,6 +34,7 @@ __all__ = [
     "get_pr_comments",
     "post_pr_comment",
     "get_pr_branch",
+    "get_pr_changed_files",
     "post_comment_reaction",
 ]
 

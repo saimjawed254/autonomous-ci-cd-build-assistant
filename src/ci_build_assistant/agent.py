@@ -23,6 +23,7 @@ from .core import (
     record_attempt,
 )
 from .llm_client import GeminiClient, SYSTEM_PROMPT, build_user_prompt
+from .scanner import get_changed_files, get_full_file_contents, scan_files_for_errors
 
 
 # ===========================================================================
@@ -46,7 +47,7 @@ class AnalysisResult:
         return data
 
 
-def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = None) -> AnalysisResult:
+def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = None, extra_context: str = "") -> AnalysisResult:
     """Analyze a build log using Gemini."""
 
     settings = load_settings()
@@ -57,7 +58,7 @@ def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = Non
         raise RuntimeError("GEMINI_API_KEY is not configured")
 
     try:
-        user_prompt = build_user_prompt(build_log, past_attempts)
+        user_prompt = build_user_prompt(build_log, past_attempts, extra_context)
         response = client.generate_json(system_prompt=SYSTEM_PROMPT, user_prompt=user_prompt)
         diagnosis = _parse_llm_response(response.text)
         return AnalysisResult(
@@ -319,9 +320,20 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     print(f"Starting CI recovery agent. Log signature: {signature}")
     print(f"Historical attempts detected: {len(past_attempts)}")
 
-    # 4. Reason: Run diagnosis
+    # 4. Gather Extra Context based on Context Strategy
+    extra_context = ""
+    changed_files = get_changed_files(settings, root)
+    if changed_files:
+        if settings.context_strategy == "full":
+            print(f"Gathering full context from {len(changed_files)} changed files...")
+            extra_context = get_full_file_contents(changed_files, root)
+        else:
+            print(f"Running multi-layer pre-scan on {len(changed_files)} changed files...")
+            extra_context = scan_files_for_errors(changed_files, root)
+
+    # 5. Reason: Run diagnosis
     try:
-        analysis = analyze_build_log(build_log, past_attempts)
+        analysis = analyze_build_log(build_log, past_attempts, extra_context)
     except Exception as exc:
         print(f"Agent loop reasoning failed: {exc}", file=sys.stderr)
         return False

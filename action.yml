@@ -21,6 +21,10 @@ inputs:
     description: 'Execution mode: "diagnose" (outputs dashboard report), "agent" (attempts autonomous re-runs), or "apply-fix" (apply suggested code changes from PR comments)'
     required: false
     default: 'agent'
+  context-strategy:
+    description: 'Strategy for gathering code context: "snippet" (default, token-efficient multi-layer scanning) or "full" (sends entire modified source files)'
+    required: false
+    default: 'snippet'
   github-token:
     description: 'GitHub token for PR commenting and API access'
     required: false
@@ -49,6 +53,7 @@ runs:
       run: |
         export GEMINI_API_KEY="${{ inputs.gemini-api-key }}"
         export GEMINI_MODEL="${{ inputs.gemini-model }}"
+        export CONTEXT_STRATEGY="${{ inputs.context-strategy }}"
         export GITHUB_TOKEN="${{ inputs.github-token }}"
         export GITHUB_REPOSITORY="${{ github.repository }}"
         export GITHUB_RUN_ID="${{ github.run_id }}"

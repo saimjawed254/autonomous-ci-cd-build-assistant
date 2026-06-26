@@ -67,7 +67,7 @@ SYSTEM_PROMPT = dedent(
 ).strip()
 
 
-def build_user_prompt(build_log: BuildLog, past_attempts: list[str] | None = None) -> str:
+def build_user_prompt(build_log: BuildLog, past_attempts: list[str] | None = None, extra_context: str = "") -> str:
     """Build the user prompt directly from the parsed log."""
 
     excerpt = _build_excerpt(build_log.content)
@@ -82,6 +82,7 @@ def build_user_prompt(build_log: BuildLog, past_attempts: list[str] | None = Non
         f"""
         Build log excerpt:
         {excerpt}
+        {extra_context}
         {attempts_context}
         Diagnose the failure directly from the log.
         Return JSON only.

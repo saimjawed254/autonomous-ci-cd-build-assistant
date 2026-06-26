@@ -72,6 +72,7 @@ class Settings:
     github_repository: str | None
     github_run_id: int | None
     github_pr_number: int | None
+    context_strategy: str
 
 
 def load_settings(project_root: Path | None = None) -> Settings:
@@ -91,6 +92,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
         github_repository=os.getenv("GITHUB_REPOSITORY"),
         github_run_id=_coerce_int(os.getenv("GITHUB_RUN_ID"), default=None),
         github_pr_number=_coerce_int(os.getenv("GITHUB_PR_NUMBER"), default=None),
+        context_strategy=os.getenv("CONTEXT_STRATEGY", "snippet"),
     )
 
 

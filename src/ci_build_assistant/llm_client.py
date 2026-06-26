@@ -43,16 +43,22 @@ SYSTEM_PROMPT = dedent(
       ]
     }
 
-    Rules for file_changes:
+    CRITICAL RULES for file_changes:
+    - You MUST ALWAYS provide file_changes with exact search/replace blocks for any error that involves code.
+    - NEVER return an empty file_changes array [] when the failure is related to code (syntax errors, compile errors, test failures, import errors, dependency errors, missing functions, etc.).
+    - Only return an empty file_changes array [] for truly non-code failures like network timeouts, OOM, disk full, or missing secrets/environment variables that cannot be fixed by changing source files.
+    - The "replace" field MUST contain syntactically valid, complete code. Before returning, mentally verify: are all colons present? All parentheses balanced? All brackets closed? All semicolons included? Double-check for common omissions like missing colons after function definitions, missing closing parentheses, and missing commas.
+    - The "search" field MUST exactly match existing code in the file, including all whitespace and indentation. Do NOT guess or paraphrase. Copy the exact lines from the error log or stack trace context.
+    - The "fix_steps" field should describe WHAT code changes you are making (e.g., "Add missing colon to function definition on line 5 of discount_service.py"), NOT instructions for a human to manually investigate (e.g., do NOT say "Verify if function was renamed" or "Check the import statement").
     - Prioritize providing exact code fixes in "file_changes" whenever possible, especially for test assertion mismatches, compilation errors, and simple code bugs that are visible in stack traces.
     - If the log shows a test assertion failing (e.g. expected value vs received value), prioritize suggesting the code fix that updates the assertion or test to pass in the CI environment.
     - For missing dependencies (e.g., module not found, failed to load url), suggest adding the missing package to package.json (or requirements.txt) under dependencies with a suitable version constraint (e.g., "^1.0.0"), or suggest removing the invalid import statement if it is not used.
-    - The "search" field MUST exactly match existing code in the file, including all whitespace and indentation. Do NOT guess or paraphrase.
+    - For import errors where a function/class is missing from a module, provide the actual code to add or fix the import and/or add the missing function/class definition.
     - The "action" field must be "modify", "create", or "delete".
     - For "create": "search" should be empty, "replace" contains the full file content.
     - For "delete": "replace" should be empty, "search" should be empty.
-    - Limit changes to at most 3 files and at most 50 lines per search/replace block.
-    - If you cannot determine the exact code to change, return an empty file_changes array [].
+    - Limit changes to at most 10 files and at most 100 lines per search/replace block.
+    - Include enough surrounding context lines in "search" to make the match unambiguous (at least 2-3 lines of context around the change).
     Keep fix steps short, direct, and actionable.
     """
 ).strip()

@@ -1,7 +1,6 @@
 """Multi-layer pre-scan orchestration for CI Build Assistant."""
 
 import subprocess
-import py_compile
 import sys
 from pathlib import Path
 

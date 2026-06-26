@@ -321,10 +321,23 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     print(f"Historical attempts detected: {len(past_attempts)}")
 
     # 4. Gather Extra Context based on Context Strategy
+    strategy = settings.context_strategy
+    try:
+        if settings.github_repository and settings.github_pr_number and settings.github_token:
+            for comment in reversed(get_pr_comments(settings.github_repository, settings.github_pr_number, settings.github_token)):
+                if "AI Build Assistant Diagnosis" in comment:
+                    break
+                if "/deep-scan" in comment:
+                    strategy = "full"
+                    print("🔍 Deep scan requested via PR comment. Overriding context strategy to 'full'.")
+                    break
+    except Exception as exc:
+        print(f"Warning: Failed to check for /deep-scan: {exc}", file=sys.stderr)
+
     extra_context = ""
     changed_files = get_changed_files(settings, root)
     if changed_files:
-        if settings.context_strategy == "full":
+        if strategy == "full":
             print(f"Gathering full context from {len(changed_files)} changed files...")
             extra_context = get_full_file_contents(changed_files, root)
         else:
@@ -387,15 +400,17 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         if diagnosis.file_changes:
             diff_preview = generate_diff_preview(diagnosis.file_changes)
             comment_body += f"\n---\n\n#### 📝 Suggested Code Changes:\n\n{diff_preview}\n"
-            comment_body += "\n💡 **To apply these changes automatically**, reply to this PR with:\n"
-            comment_body += "```\n/apply-fix\n```\n"
+            comment_body += "\n💡 **To apply these changes automatically**, reply to this PR with:\n\n"
+            comment_body += "```text\n/apply-fix\n```\n\n"
+            comment_body += "🔍 **Massive errors?** To run a deep scan using the full file contents (⚠️ uses more tokens), reply with:\n\n"
+            comment_body += "```text\n/deep-scan\n```\n\n"
+            comment_body += f"Attempt `#{len(past_attempts) + 1}`. A re-run will be triggered automatically."
         else:
             comment_body += "\n---\n\n#### ℹ️ No Automatic Code Changes Available\n\n"
             comment_body += "The assistant could not determine exact code changes for this error type. "
             comment_body += "This may happen for infrastructure issues (network, permissions, disk space) "
             comment_body += "or complex refactoring errors that require manual investigation.\n"
-
-        comment_body += f"\n*Attempt #{len(past_attempts) + 1}. A re-run will be triggered automatically.*"
+            comment_body += f"\n*Attempt #{len(past_attempts) + 1}. A re-run will be triggered automatically.*"
 
         metadata = {
             "signature": signature,

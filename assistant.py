@@ -210,6 +210,35 @@ def _run_apply_fix() -> int:
         _post_failure_comment(repo, pr_number, token, msg)
         return 1
 
+    # Check for /deep-scan command
+    for comment in reversed(comments):
+        if "/deep-scan" in comment:
+            print("🔍 Deep scan requested via PR comment. Triggering CI re-run...")
+            try:
+                branch = get_pr_branch(repo, pr_number, token)
+                root = Path.cwd()
+                env = {**os.environ, "GIT_AUTHOR_NAME": "AI Build Assistant", "GIT_COMMITTER_NAME": "AI Build Assistant",
+                       "GIT_AUTHOR_EMAIL": "github-actions[bot]@users.noreply.github.com",
+                       "GIT_COMMITTER_EMAIL": "github-actions[bot]@users.noreply.github.com"}
+                
+                def _run(cmd: list[str]) -> None:
+                    result = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, env=env)
+                    if result.returncode != 0:
+                        raise RuntimeError(f"Command {' '.join(cmd)} failed: {result.stderr.strip()}")
+                        
+                _run(["git", "config", "user.name", "AI Build Assistant"])
+                _run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"])
+                _run(["git", "commit", "--allow-empty", "-m", "chore: trigger deep scan"])
+                _run(["git", "push", "origin", f"HEAD:{branch}"])
+                print("Successfully pushed trigger commit for deep scan.")
+            except Exception as e:
+                print(f"Error triggering deep scan: {e}")
+                _post_failure_comment(repo, pr_number, token, f"Could not push trigger commit for deep scan: {e}")
+                return 1
+            return 0
+        elif "/apply-fix" in comment:
+            break
+
     # Find the most recent Build Assistant metadata comment (search from newest to oldest)
     metadata = None
     for comment in reversed(comments):

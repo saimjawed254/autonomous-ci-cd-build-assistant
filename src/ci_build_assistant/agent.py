@@ -84,7 +84,7 @@ def _parse_llm_response(text: str) -> FailureDiagnosis:
 
 
 def _diagnosis_from_payload(payload: dict[str, Any]) -> FailureDiagnosis:
-    failure_type = _parse_failure_type(payload.get("failure_type"))
+    failure_types = _parse_failure_types(payload.get("failure_types"))
     confidence = _normalized_text(payload.get("confidence"), default="UNCERTAIN")
     root_cause = _normalized_text(payload.get("root_cause"), default="Gemini did not provide a root cause.")
     evidence = _normalized_text(payload.get("evidence"), default="Gemini did not provide evidence.")
@@ -92,7 +92,7 @@ def _diagnosis_from_payload(payload: dict[str, Any]) -> FailureDiagnosis:
     file_changes = _parse_file_changes(payload.get("file_changes"))
 
     return FailureDiagnosis(
-        failure_type=failure_type,
+        failure_types=failure_types,
         confidence=confidence,
         matched_pattern="gemini-json",
         evidence=evidence,
@@ -105,13 +105,18 @@ def _diagnosis_from_payload(payload: dict[str, Any]) -> FailureDiagnosis:
     )
 
 
-def _parse_failure_type(value: Any) -> FailureType:
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        for failure_type in FailureType:
-            if failure_type.value == normalized:
-                return failure_type
-    return FailureType.UNKNOWN
+def _parse_failure_types(value: Any) -> tuple[FailureType, ...]:
+    types = []
+    if isinstance(value, list):
+        for item in value:
+            if isinstance(item, str):
+                normalized = item.strip().lower()
+                for ft in FailureType:
+                    if ft.value == normalized and ft not in types:
+                        types.append(ft)
+    if not types:
+        types.append(FailureType.UNKNOWN)
+    return tuple(types)
 
 
 def _parse_fix_steps(value: Any) -> tuple[str, ...]:
@@ -155,6 +160,7 @@ def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
         search = item.get("search", "")
         replace = item.get("replace", "")
         action = item.get("action", "modify").strip().lower()
+        error_type = item.get("error_type", "unknown").strip().lower()
 
         # Count lines in search and replace blocks
         search_lines = search.count("\n") + 1 if search else 0
@@ -176,6 +182,7 @@ def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
             search=search,
             replace=replace,
             action=action,
+            error_type=error_type,
         ))
     return tuple(changes)
 
@@ -191,36 +198,46 @@ def _suggest_fix(fix_steps: tuple[str, ...], root_cause: str) -> str:
 # ===========================================================================
 
 def generate_diff_preview(file_changes: tuple[FileChange, ...]) -> str:
-    """Render file changes as a GitHub-flavored markdown diff block."""
+    """Render file changes as a GitHub-flavored markdown diff block, grouped by error type."""
 
     if not file_changes:
         return ""
 
-    parts: list[str] = []
+    # Group by error_type
+    groups: dict[str, list[FileChange]] = {}
     for fc in file_changes:
-        header = f"📄 `{fc.path}`"
-        if fc.action == "create":
-            header += " *(new file)*"
-        elif fc.action == "delete":
-            header += " *(delete file)*"
+        groups.setdefault(fc.error_type, []).append(fc)
 
-        parts.append(header)
-        parts.append("```diff")
+    parts: list[str] = []
+    for error_type, changes in groups.items():
+        if len(groups) > 1 or error_type != "unknown":
+            parts.append(f"##### 🐛 Fixes for: `{error_type}`")
+            parts.append("")
 
-        if fc.action == "delete":
-            for line in fc.search.splitlines():
-                parts.append(f"- {line}")
-        elif fc.action == "create":
-            for line in fc.replace.splitlines():
-                parts.append(f"+ {line}")
-        else:
-            for line in fc.search.splitlines():
-                parts.append(f"- {line}")
-            for line in fc.replace.splitlines():
-                parts.append(f"+ {line}")
+        for fc in changes:
+            header = f"📄 `{fc.path}`"
+            if fc.action == "create":
+                header += " *(new file)*"
+            elif fc.action == "delete":
+                header += " *(delete file)*"
 
-        parts.append("```")
-        parts.append("")
+            parts.append(header)
+            parts.append("```diff")
+
+            if fc.action == "delete":
+                for line in fc.search.splitlines():
+                    parts.append(f"- {line}")
+            elif fc.action == "create":
+                for line in fc.replace.splitlines():
+                    parts.append(f"+ {line}")
+            else:
+                for line in fc.search.splitlines():
+                    parts.append(f"- {line}")
+                for line in fc.replace.splitlines():
+                    parts.append(f"+ {line}")
+
+            parts.append("```")
+            parts.append("")
 
     return "\n".join(parts)
 
@@ -312,7 +329,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     # Write transient status to file for retry workflow
     try:
         transient_types = {"network_timeout", "oom_error", "disk_full", "permission_denied", "unknown"}
-        is_transient = analysis.diagnosis.failure_type.value in transient_types
+        is_transient = any(ft.value in transient_types for ft in analysis.diagnosis.failure_types)
         (root / "transient_status.txt").write_text("true" if is_transient else "false", encoding="utf-8")
     except Exception as exc:
         print(f"Warning: Could not write transient status: {exc}", file=sys.stderr)
@@ -330,7 +347,8 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
             print("Error: No new fix recommendations could be extracted. Halting agent loop.")
             return False
 
-    print(f"Reasoned Failure Category: {diagnosis.failure_type.value}")
+    categories = ", ".join(ft.value for ft in diagnosis.failure_types)
+    print(f"Reasoned Failure Categories: {categories}")
     print(f"Reasoned Fix Proposal: {suggested_fix}")
 
     if not token or not repo:
@@ -344,7 +362,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         print(f"Posting diagnostic report comment to PR #{pr_number}...")
         comment_body = (
             f"### 🔍 AI Build Assistant Diagnosis\n\n"
-            f"**Failure Category**: `{diagnosis.failure_type.value}`\n"
+            f"**Failure Categories**: `{categories}`\n"
             f"**Confidence Level**: `{diagnosis.confidence}`\n"
             f"**Root Cause**: {diagnosis.root_cause}\n\n"
             f"#### 🛠️ Suggested Recovery Action:\n"

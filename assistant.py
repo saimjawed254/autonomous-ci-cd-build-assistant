@@ -130,8 +130,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             confidence_badge = "🔴 UNCERTAIN"
 
-        failure_type_val = analysis.diagnosis.failure_type.value
-        category_name = FAILURE_TYPE_NAMES.get(failure_type_val, failure_type_val.replace("_", " ").title())
+        category_names = []
+        for ft in analysis.diagnosis.failure_types:
+            ft_val = ft.value
+            name = FAILURE_TYPE_NAMES.get(ft_val, ft_val.replace("_", " ").title())
+            category_names.append(name)
+        categories_str = ", ".join(category_names)
 
         print("=" * 80)
         print("🔍 CI/CD Build Diagnosis Report")
@@ -140,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"📊 Stats: {build_log.character_count} characters, {build_log.line_count} lines")
         print(f"🤖 Analysis Source: Gemini AI (Model: {settings.gemini_model})")
         print("-" * 80)
-        print(f"🚨 Failure Category: {category_name}")
+        print(f"🚨 Failure Categories: {categories_str}")
         print(f"🎯 Confidence Level: {confidence_badge}")
         print("-" * 80)
         print("\n📝 Root Cause:")

@@ -151,6 +151,7 @@ class FileChange:
     search: str
     replace: str
     action: str = "modify"
+    error_type: str = "unknown"
 
     def to_dict(self) -> dict[str, str]:
         return {
@@ -158,6 +159,7 @@ class FileChange:
             "search": self.search,
             "replace": self.replace,
             "action": self.action,
+            "error_type": self.error_type,
         }
 
 
@@ -165,7 +167,7 @@ class FileChange:
 class FailureDiagnosis:
     """Structured diagnosis payload returned to the CLI."""
 
-    failure_type: FailureType
+    failure_types: tuple[FailureType, ...]
     confidence: str
     matched_pattern: str
     evidence: str
@@ -180,7 +182,7 @@ class FailureDiagnosis:
         """Serialize the diagnosis to JSON-friendly data."""
 
         return {
-            "failure_type": self.failure_type.value,
+            "failure_types": [ft.value for ft in self.failure_types],
             "confidence": self.confidence,
             "matched_pattern": self.matched_pattern,
             "evidence": self.evidence,

@@ -28,7 +28,7 @@ SYSTEM_PROMPT = dedent(
     Return only valid JSON.
     Your output must match this schema:
     {
-      "failure_type": "dependency_error|test_failure|config_issue|oom_error|network_timeout|permission_denied|missing_secret|compile_error|disk_full|unknown",
+      "failure_types": ["dependency_error", "test_failure"],
       "root_cause": "short explanation",
       "fix_steps": ["step 1", "step 2"],
       "confidence": "HIGH|MEDIUM|UNCERTAIN",
@@ -38,14 +38,17 @@ SYSTEM_PROMPT = dedent(
           "path": "relative/path/to/file.py",
           "search": "exact code block to find",
           "replace": "exact code block to replace it with",
-          "action": "modify"
+          "action": "modify",
+          "error_type": "dependency_error"
         }
       ]
     }
 
     CRITICAL RULES for file_changes:
+    - Identify ALL error categories present in the log and list them in "failure_types".
     - You MUST ALWAYS provide file_changes with exact search/replace blocks for any error that involves code.
     - NEVER return an empty file_changes array [] when the failure is related to code (syntax errors, compile errors, test failures, import errors, dependency errors, missing functions, etc.).
+    - For each file_change, assign its "error_type" to one of the values listed in your "failure_types" array.
     - Only return an empty file_changes array [] for truly non-code failures like network timeouts, OOM, disk full, or missing secrets/environment variables that cannot be fixed by changing source files.
     - The "replace" field MUST contain syntactically valid, complete code. Before returning, mentally verify: are all colons present? All parentheses balanced? All brackets closed? All semicolons included? Double-check for common omissions like missing colons after function definitions, missing closing parentheses, and missing commas.
     - The "search" field MUST exactly match existing code in the file, including all whitespace and indentation. Do NOT guess or paraphrase. Copy the exact lines from the error log or stack trace context.
@@ -130,20 +133,23 @@ class GeminiClient:
                 "responseSchema": {
                     "type": "object",
                     "properties": {
-                        "failure_type": {
-                            "type": "string",
-                            "enum": [
-                                "dependency_error",
-                                "test_failure",
-                                "config_issue",
-                                "oom_error",
-                                "network_timeout",
-                                "permission_denied",
-                                "missing_secret",
-                                "compile_error",
-                                "disk_full",
-                                "unknown"
-                            ]
+                        "failure_types": {
+                            "type": "array",
+                            "items": {
+                                "type": "string",
+                                "enum": [
+                                    "dependency_error",
+                                    "test_failure",
+                                    "config_issue",
+                                    "oom_error",
+                                    "network_timeout",
+                                    "permission_denied",
+                                    "missing_secret",
+                                    "compile_error",
+                                    "disk_full",
+                                    "unknown"
+                                ]
+                            }
                         },
                         "root_cause": {"type": "string"},
                         "fix_steps": {
@@ -161,13 +167,14 @@ class GeminiClient:
                                     "search": {"type": "string"},
                                     "replace": {"type": "string"},
                                     "action": {"type": "string"},
+                                    "error_type": {"type": "string"},
                                 },
-                                "required": ["path", "search", "replace", "action"],
+                                "required": ["path", "search", "replace", "action", "error_type"],
                             },
                         },
                       },
                       "required": [
-                          "failure_type",
+                          "failure_types",
                           "root_cause",
                           "fix_steps",
                           "confidence",
@@ -175,7 +182,7 @@ class GeminiClient:
                           "file_changes",
                       ],
                       "propertyOrdering": [
-                          "failure_type",
+                          "failure_types",
                           "root_cause",
                           "fix_steps",
                           "confidence",

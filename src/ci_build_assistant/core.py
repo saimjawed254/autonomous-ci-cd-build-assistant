@@ -87,7 +87,7 @@ def load_settings(project_root: Path | None = None) -> Settings:
         gemini_model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
         gemini_temperature=_coerce_float(os.getenv("GEMINI_TEMPERATURE"), default=0.2),
         gemini_timeout_seconds=_coerce_float(os.getenv("GEMINI_TIMEOUT_SECONDS"), default=30.0),
-        gemini_max_output_tokens=_coerce_int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS"), default=1024),
+        gemini_max_output_tokens=_coerce_int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS"), default=8192),
         github_token=os.getenv("GITHUB_TOKEN"),
         github_repository=os.getenv("GITHUB_REPOSITORY"),
         github_run_id=_coerce_int(os.getenv("GITHUB_RUN_ID"), default=None),

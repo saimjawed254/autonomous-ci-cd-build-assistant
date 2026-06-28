@@ -60,8 +60,8 @@ SYSTEM_PROMPT = dedent(
     - The "action" field must be "modify", "create", or "delete".
     - For "create": "search" should be empty, "replace" contains the full file content.
     - For "delete": "replace" should be empty, "search" should be empty.
-    - Limit changes to at most 10 files and at most 100 lines per search/replace block.
-    - Include enough surrounding context lines in "search" to make the match unambiguous (at least 2-3 lines of context around the change).
+    - Limit changes to at most 10 files. If you are provided with FULL FILE CONTEXT, you MUST replace the ENTIRE file by making the "search" block the exact full file content, and the "replace" block the full corrected file content. Otherwise, limit to at most 100 lines per block.
+    - Include enough surrounding context lines in "search" to make the match unambiguous.
     Keep fix steps short, direct, and actionable.
     """
 ).strip()

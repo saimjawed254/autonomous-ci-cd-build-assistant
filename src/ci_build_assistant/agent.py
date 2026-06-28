@@ -325,34 +325,8 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     try:
         analysis = analyze_build_log(build_log, past_attempts, extra_context)
     except Exception as exc:
-        print(f"Warning: LLM reasoning failed ({exc}). Falling back to rule-based diagnosis.", file=sys.stderr)
-        
-        # Rule-based fallback
-        content_lower = build_log.content.lower()
-        if "timeout" in content_lower or "connection refused" in content_lower:
-            fallback_type = FailureType.NETWORK
-            root_cause = "Network connection timed out or was refused."
-        elif "module not found" in content_lower or "no such file or directory" in content_lower:
-            fallback_type = FailureType.DEPENDENCY
-            root_cause = "A required dependency or file is missing."
-        elif "permission denied" in content_lower:
-            fallback_type = FailureType.PERMISSION
-            root_cause = "The runner lacks permissions to execute or access a resource."
-        else:
-            fallback_type = FailureType.UNKNOWN
-            root_cause = "Could not automatically determine the root cause (LLM fallback)."
-
-        diagnosis = FailureDiagnosis(
-            failure_types=(fallback_type,),
-            confidence="LOW",
-            matched_pattern="Rule-based fallback pattern",
-            evidence="Matched keywords in the raw build log.",
-            root_cause=root_cause,
-            fix_steps=("Review the raw logs manually.", "Check for infrastructure or configuration issues."),
-            suggested_fix="This is a rule-based fallback suggestion because the AI service was unavailable.",
-            source="rule_based",
-        )
-        analysis = AnalysisResult(diagnosis=diagnosis, used_llm=False, llm_enabled=True)
+        print(f"Agent loop reasoning failed: {exc}", file=sys.stderr)
+        return False
 
     # Write transient status to file for retry workflow
     try:

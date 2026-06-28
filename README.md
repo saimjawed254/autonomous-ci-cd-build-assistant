@@ -191,7 +191,7 @@ To create the PAT:
 
 ---
 
-### Step 3 (Optional): Enable One-Click Code Fixes
+### Step 3 (Optional): Enable One-Click Code Fixes & Deep Scan
 
 When the assistant diagnoses a failure, it can also suggest **exact code changes** shown as a visual diff in the PR comment. To apply these changes with one click, add a third workflow file.
 
@@ -212,7 +212,7 @@ on:
 
 jobs:
   apply:
-    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/apply-fix') }}
+    if: ${{ github.event.issue.pull_request && (startsWith(github.event.comment.body, '/apply-fix') || startsWith(github.event.comment.body, '/deep-scan')) }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -239,6 +239,20 @@ jobs:
 
 > This keeps a **human in the loop** at all times. No code is changed without your explicit approval.
 
+#### `/deep-scan` — Full File Analysis
+
+For massive structural errors that span multiple files, the standard log-based scan may miss hidden bugs. The `/deep-scan` command sends the **entire contents** of all changed files to Gemini for a thorough code review.
+
+**When to use it:**
+- When `/apply-fix` fixes some errors but new ones keep appearing
+- When files have deeply broken syntax (mismatched brackets, missing colons across many lines)
+- When the standard scan only finds partial issues
+
+> [!WARNING]
+> `/deep-scan` uses significantly more API tokens than standard analysis because it sends full file contents. Use it for complex, multi-file structural errors.
+
+> **💡 Tip:** For heavily broken codebases, you may need to run `/apply-fix` or `/deep-scan` **multiple times**. Each round fixes a batch of errors, and the CI pipeline automatically re-diagnoses any remaining issues.
+
 ---
 
 ## Action Configuration (Inputs)
@@ -251,6 +265,7 @@ When adding this Action to your custom workflow files, you can configure these i
 | `log-file` | No | `none` | The path to the build log file you want to analyze (e.g. `build_failure.log`). Not needed in `apply-fix` mode. |
 | `mode` | No | `agent` | **How the assistant executes:**<br>• `agent` (Default): Posts PR diagnostic reports and prepares log metadata for auto-retry.<br>• `diagnose`: Runs local analysis and prints to the build runner console only.<br>• `apply-fix`: Applies suggested code modifications from a PR comment directly to the branch. |
 | `gemini-model` | No | `gemini-3.1-flash-lite` | The AI model used. You can change this to another Google model (e.g., `gemini-1.5-flash` or `gemini-1.5-pro`) if needed. |
+| `context-strategy` | No | `snippet` | **How code context is gathered:**<br>• `snippet` (Default): Token-efficient multi-layer scanning of error snippets.<br>• `full`: Sends entire modified source files for deep analysis. Automatically activated by `/deep-scan`. |
 | `github-token` | No | `github.token` | The GitHub token used to write PR comments. Auto-provided by GitHub Actions. |
 
 ---
@@ -264,21 +279,3 @@ When adding this Action to your custom workflow files, you can configure these i
 5. **You review the diff** and reply with `/apply-fix` to approve — the assistant commits and pushes the changes automatically.
 6. **If auto-retry is enabled**, the failed build is rerun automatically (up to 3 times).
 7. **Safety guardrail**: After 3 failed attempts, the assistant stops retrying to prevent runaway costs. It tracks past attempts using hidden metadata in PR comments so it never suggests the same fix twice.
-
----
-
-## Local CLI Usage
-
-You can also run the assistant locally on any log file:
-
-```bash
-python assistant.py path/to/build.log
-```
-
-For JSON output (useful for scripting):
-
-```bash
-python assistant.py path/to/build.log --json
-```
-
-Requires a `.env` file at the repo root with `GEMINI_API_KEY=your_key`.

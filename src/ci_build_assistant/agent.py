@@ -138,13 +138,11 @@ def _normalized_text(value: Any, *, default: str) -> str:
 
 
 def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
-    """Parse the file_changes array from the Gemini JSON payload, enforcing safety limits."""
+    """Parse the file_changes array from the Gemini JSON payload."""
 
     if not isinstance(value, list):
         return ()
     changes = []
-    total_lines = 0
-    seen_paths = set()
     for item in value:
         if not isinstance(item, dict):
             continue
@@ -152,31 +150,10 @@ def _parse_file_changes(value: Any) -> tuple[FileChange, ...]:
         if not path:
             continue
 
-        seen_paths.add(path)
-        # Enforce max 10 distinct files
-        if len(seen_paths) > 10:
-            print("Warning: Suggested file changes span more than 10 files, skipping auto-fix suggestion.", file=sys.stderr)
-            return ()
-
         search = item.get("search", "")
         replace = item.get("replace", "")
         action = item.get("action", "modify").strip().lower()
         error_type = item.get("error_type", "unknown").strip().lower()
-
-        # Count lines in search and replace blocks
-        search_lines = search.count("\n") + 1 if search else 0
-        replace_lines = replace.count("\n") + 1 if replace else 0
-
-        # Enforce max 100 lines per block
-        if search_lines > 100 or replace_lines > 100:
-            print("Warning: Suggested file change block is too large (> 100 lines), skipping auto-fix suggestion.", file=sys.stderr)
-            return ()
-
-        total_lines += max(search_lines, replace_lines)
-        # Enforce max 500 lines cumulative across all changes
-        if total_lines > 500:
-            print("Warning: Total suggested file changes are too large (> 500 lines), skipping auto-fix suggestion.", file=sys.stderr)
-            return ()
 
         changes.append(FileChange(
             path=path,
@@ -400,17 +377,24 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         if diagnosis.file_changes:
             diff_preview = generate_diff_preview(diagnosis.file_changes)
             comment_body += f"\n---\n\n#### 📝 Suggested Code Changes:\n\n{diff_preview}\n"
-            comment_body += "\n💡 **To apply these changes automatically**, reply to this PR with:\n\n"
-            comment_body += "```text\n/apply-fix\n```\n\n"
-            comment_body += "🔍 **Massive errors?** To run a deep scan using the full file contents (⚠️ uses more tokens), reply with:\n\n"
-            comment_body += "```text\n/deep-scan\n```\n\n"
-            comment_body += f"Attempt `#{len(past_attempts) + 1}`. A re-run will be triggered automatically."
+            comment_body += "\n---\n\n"
+            comment_body += "#### 🚀 Available Commands\n\n"
+            comment_body += "| Command | When to Use |\n"
+            comment_body += "| :--- | :--- |\n"
+            comment_body += "| `/apply-fix` | Apply the specific code changes shown above to your branch. |\n"
+            comment_body += "| `/deep-scan` | Re-analyze using **full file contents** for massive/structural errors (⚠️ uses more tokens). |\n\n"
+            comment_body += "> **💡 Tip:** For heavily broken codebases with many errors, you may need to run `/apply-fix` or `/deep-scan` **multiple times**. "
+            comment_body += "Each round fixes a batch of errors, and the CI pipeline will re-diagnose any remaining issues automatically.\n\n"
+            comment_body += f"*Attempt #{len(past_attempts) + 1}.*"
         else:
             comment_body += "\n---\n\n#### ℹ️ No Automatic Code Changes Available\n\n"
             comment_body += "The assistant could not determine exact code changes for this error type. "
             comment_body += "This may happen for infrastructure issues (network, permissions, disk space) "
-            comment_body += "or complex refactoring errors that require manual investigation.\n"
-            comment_body += f"\n*Attempt #{len(past_attempts) + 1}. A re-run will be triggered automatically.*"
+            comment_body += "or complex refactoring errors that require manual investigation.\n\n"
+            comment_body += "| Command | When to Use |\n"
+            comment_body += "| :--- | :--- |\n"
+            comment_body += "| `/deep-scan` | Try a deep scan using full file contents — may find fixes the standard scan missed. |\n\n"
+            comment_body += f"*Attempt #{len(past_attempts) + 1}.*"
 
         metadata = {
             "signature": signature,

@@ -60,7 +60,8 @@ SYSTEM_PROMPT = dedent(
     - The "action" field must be "modify", "create", or "delete".
     - For "create": "search" should be empty, "replace" contains the full file content.
     - For "delete": "replace" should be empty, "search" should be empty.
-    - Limit changes to at most 10 files. If you are provided with FULL FILE CONTEXT, you MUST replace the ENTIRE file by making the "search" block the exact full file content, and the "replace" block the full corrected file content. Otherwise, limit to at most 100 lines per block.
+    - Suggest fixes for ALL broken files you detect across the entire repository. Do not limit the number of files or line changes you suggest.
+    - If you are provided with FULL FILE CONTEXT (deep scan mode), you MUST replace the ENTIRE file by making the "search" block the exact full file content, and the "replace" block the full corrected file content.
     - Include enough surrounding context lines in "search" to make the match unambiguous.
     Keep fix steps short, direct, and actionable.
     """

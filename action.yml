@@ -1,6 +1,6 @@
-name: 'AI-Powered CI/CD Build Assistant'
+name: 'Autonomous CI/CD Build Assistant'
 description: 'Diagnoses build failures from pipeline logs and triggers recovery attempts autonomously.'
-author: 'Google DeepMind Pair Programming'
+author: 'Saim Jawed'
 branding:
   icon: 'terminal'
   color: 'blue'

@@ -47,6 +47,55 @@ class AnalysisResult:
         return data
 
 
+def rule_based_fallback(build_log: BuildLog) -> FailureDiagnosis:
+    """Fallback to rule-based keyword matching if LLM fails (Week 1 requirement)."""
+    
+    content = build_log.content.lower()
+    
+    if "modulenotfounderror" in content or "pip install" in content:
+        return FailureDiagnosis(
+            failure_types=(FailureType.DEPENDENCY,),
+            confidence="MEDIUM",
+            matched_pattern="rule-based",
+            evidence="Detected 'ModuleNotFoundError' or 'pip install' in logs.",
+            root_cause="A required dependency is missing from the environment.",
+            fix_steps=("Add the missing dependency to requirements.txt or package.json.",),
+            file_changes=(),
+        )
+    
+    if "syntaxerror" in content or "indentationerror" in content:
+        return FailureDiagnosis(
+            failure_types=(FailureType.COMPILE,),
+            confidence="MEDIUM",
+            matched_pattern="rule-based",
+            evidence="Detected 'SyntaxError' or 'IndentationError' in logs.",
+            root_cause="There is a syntax error in the source code.",
+            fix_steps=("Review the line number in the stack trace and fix the syntax.",),
+            file_changes=(),
+        )
+        
+    if "failed test_" in content or "assertionerror" in content:
+        return FailureDiagnosis(
+            failure_types=(FailureType.TEST,),
+            confidence="MEDIUM",
+            matched_pattern="rule-based",
+            evidence="Detected 'FAILED test_' or 'AssertionError' in logs.",
+            root_cause="One or more automated tests have failed.",
+            fix_steps=("Review the test output and correct the assertion or the underlying logic.",),
+            file_changes=(),
+        )
+
+    return FailureDiagnosis(
+        failure_types=(FailureType.UNKNOWN,),
+        confidence="LOW",
+        matched_pattern="rule-based",
+        evidence="No known rule-based patterns matched the log.",
+        root_cause="The build failed for an unknown reason.",
+        fix_steps=("Investigate the build logs manually.",),
+        file_changes=(),
+    )
+
+
 def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = None, extra_context: str = "") -> AnalysisResult:
     """Analyze a build log using Gemini."""
 
@@ -55,7 +104,13 @@ def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = Non
     llm_enabled = client.is_configured()
 
     if not llm_enabled:
-        raise RuntimeError("GEMINI_API_KEY is not configured")
+        # Fall back to rule-based engine if no API key is provided
+        return AnalysisResult(
+            diagnosis=rule_based_fallback(build_log),
+            used_llm=False,
+            llm_enabled=False,
+            error_message="GEMINI_API_KEY is not configured",
+        )
 
     try:
         user_prompt = build_user_prompt(build_log, past_attempts, extra_context)
@@ -67,7 +122,13 @@ def analyze_build_log(build_log: BuildLog, past_attempts: list[str] | None = Non
             llm_enabled=True,
         )
     except Exception as exc:
-        raise RuntimeError(f"Gemini analysis failed: {exc}") from exc
+        # Graceful fallback if Gemini API fails (e.g. rate limit, JSON parsing)
+        return AnalysisResult(
+            diagnosis=rule_based_fallback(build_log),
+            used_llm=False,
+            llm_enabled=True,
+            error_message=f"Gemini analysis failed: {exc}",
+        )
 
 
 def _parse_llm_response(text: str) -> FailureDiagnosis:

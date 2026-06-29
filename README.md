@@ -1,4 +1,4 @@
-# AI-Powered CI/CD Build Assistant
+# Autonomous CI/CD Build Assistant
 
 A GitHub Action that uses Google Gemini to automatically diagnose build failures, post fix suggestions on your Pull Requests, and optionally retry failed builds.
 
@@ -45,7 +45,7 @@ You need to do two things:
 ```yaml
 - name: AI Build Assistant
   if: failure()
-  uses: saimjawed254/accenture-intern-assignment@main
+  uses: saimjawed254/autonomous-ci-cd-build-assistant@main
   with:
     log-file: 'build_failure.log'
     gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
@@ -108,7 +108,7 @@ jobs:
       # -------------------------------------------------------------
       - name: AI Build Assistant
         if: failure()
-        uses: saimjawed254/accenture-intern-assignment@main
+        uses: saimjawed254/autonomous-ci-cd-build-assistant@main
         with:
           log-file: 'build_failure.log'
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}
@@ -144,7 +144,7 @@ jobs:
         id: check_transient
         run: |
           # Download transient status artifact
-          gh run download ${{ github.event.workflow_run.id }} -n transient-status --dir . || echo "No transient status found"
+          gh run download ${{ github.event.workflow_run.id }} -n transient-status --repo ${{ github.repository }} --dir . || echo "No transient status found"
           
           # Read and evaluate transient status (e.g. network timeout, OOM, disk full)
           if [ -f transient_status.txt ] && [ "$(cat transient_status.txt)" = "true" ]; then
@@ -224,7 +224,7 @@ jobs:
           ref: refs/pull/${{ github.event.issue.number }}/head
 
       - name: Apply AI Fix
-        uses: saimjawed254/accenture-intern-assignment@main
+        uses: saimjawed254/autonomous-ci-cd-build-assistant@main
         with:
           mode: 'apply-fix'
           gemini-api-key: ${{ secrets.GEMINI_API_KEY }}

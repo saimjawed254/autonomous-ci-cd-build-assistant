@@ -13,4 +13,4 @@ unwanted/
 .build_assistant_logs/
 transient_status.txt
 presentation_diagrams.md
-
+docs/*

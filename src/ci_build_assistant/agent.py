@@ -291,9 +291,12 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     root = project_root or Path.cwd()
     settings = load_settings(root)
 
+    print("\n--- STEP 1: OBSERVE & CHECK MEMORY ---")
     # 1. Observe: Get log signature
     signature = get_log_signature(build_log.content)
+    print(f"Log Signature Generated: {signature}")
 
+    print("Checking history to prevent retry loops...")
     # 2. Check Memory
     history_file = root / ".build_assistant_history.json"
     past_attempts = get_past_attempts(history_file, signature)
@@ -372,6 +375,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
     except Exception as exc:
         print(f"Warning: Failed to check for /deep-scan: {exc}", file=sys.stderr)
 
+    print("\n--- STEP 2: CONTEXT GATHERING ---")
     extra_context = ""
     changed_files = get_changed_files(settings, root)
     if changed_files:
@@ -382,6 +386,7 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
             print(f"Running multi-layer pre-scan on {len(changed_files)} changed files...")
             extra_context = scan_files_for_errors(changed_files, root)
 
+    print("\n--- STEP 3: LLM ANALYSIS ---")
     # 5. Reason: Run diagnosis
     try:
         analysis = analyze_build_log(build_log, past_attempts, extra_context)
@@ -389,10 +394,17 @@ def run_agent_loop(build_log: BuildLog, project_root: Path | None = None) -> boo
         print(f"Agent loop reasoning failed: {exc}", file=sys.stderr)
         return False
 
+    if analysis.used_llm and analysis.diagnosis.raw_model_output:
+        print("\n--- RAW LLM RESPONSE ---")
+        print(analysis.diagnosis.raw_model_output)
+        print("------------------------\n")
+
+    print("\n--- STEP 4: RECOVERY ACTION ---")
     # Write transient status to file for retry workflow
     try:
         transient_types = {"network_timeout", "oom_error", "disk_full", "permission_denied", "unknown"}
         is_transient = any(ft.value in transient_types for ft in analysis.diagnosis.failure_types)
+        print(f"Transient error detected: {is_transient}. Writing status to transient_status.txt...")
         (root / "transient_status.txt").write_text("true" if is_transient else "false", encoding="utf-8")
     except Exception as exc:
         print(f"Warning: Could not write transient status: {exc}", file=sys.stderr)

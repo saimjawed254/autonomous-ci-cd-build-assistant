@@ -270,6 +270,7 @@ def record_attempt(history_path: Path, log_signature: str, fix_suggestion: str, 
 
 def post_pr_comment(repo: str, pr_number: int, comment: str, token: str) -> None:
     """Post a diagnostic report comment onto a GitHub Pull Request."""
+    print(f"API Call: Posting comment to PR #{pr_number}...")
 
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     payload = {"body": comment}
@@ -299,6 +300,7 @@ def post_pr_comment(repo: str, pr_number: int, comment: str, token: str) -> None
 
 def get_pr_comments(repo: str, pr_number: int, token: str) -> list[str]:
     """Retrieve all comments posted on a Pull Request issues thread."""
+    print(f"API Call: Fetching comments from PR #{pr_number}...")
 
     url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
     
@@ -333,6 +335,7 @@ def get_pr_comments(repo: str, pr_number: int, token: str) -> list[str]:
 
 def get_pr_branch(repo: str, pr_number: int, token: str) -> str:
     """Retrieve the branch name (head.ref) for a given Pull Request."""
+    print(f"API Call: Fetching branch name for PR #{pr_number}...")
 
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}"
     
@@ -396,6 +399,7 @@ def post_comment_reaction(repo: str, comment_id: int, token: str, content: str =
 
 def get_pr_changed_files(repo: str, pr_number: int, token: str) -> list[str]:
     """Retrieve the list of file paths changed in a Pull Request."""
+    print(f"API Call: Fetching changed files for PR #{pr_number}...")
 
     url = f"https://api.github.com/repos/{repo}/pulls/{pr_number}/files?per_page=100"
 

@@ -74,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = build_parser()
     args = parser.parse_args(argv)
+    
+    print(f"\n🚀 Starting Autonomous CI/CD Build Assistant (Mode: {args.mode})")
 
     # apply-fix mode does not need a log file
     if args.mode == "apply-fix":
@@ -200,6 +202,7 @@ def _run_apply_fix() -> int:
         except Exception as exc:
             print(f"Warning: Failed to add start reaction: {exc}", file=sys.stderr)
 
+    print("\n--- STEP 1: PARSING PR COMMENTS ---")
     print(f"🔧 Apply-fix mode: Fetching comments from {repo} PR #{pr_number}...")
 
     try:
@@ -290,6 +293,7 @@ def _run_apply_fix() -> int:
 
     print(f"Found {len(file_changes)} file change(s) to apply.")
 
+    print("\n--- STEP 2: APPLYING FILE CHANGES ---")
     # Apply each file change
     root = Path.cwd()
     applied_count = 0
@@ -331,7 +335,7 @@ def _run_apply_fix() -> int:
                 failure_details.append(detail)
                 continue
 
-            print(f"    ✅ Matched using strategy: {strategy}")
+            print(f"    ✅ Attempting to modify block using strategy: {strategy}...")
             file_path.write_text(new_content, encoding="utf-8")
             applied_count += 1
         else:

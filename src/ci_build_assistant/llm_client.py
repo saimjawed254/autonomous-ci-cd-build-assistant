@@ -71,6 +71,7 @@ SYSTEM_PROMPT = dedent(
 def build_user_prompt(build_log: BuildLog, past_attempts: list[str] | None = None, extra_context: str = "") -> str:
     """Build the user prompt directly from the parsed log."""
 
+    print("Constructing dynamic prompt with log excerpt and code context...")
     excerpt = _build_excerpt(build_log.content)
     
     attempts_context = ""
@@ -203,9 +204,11 @@ class GeminiClient:
             method="POST",
         )
 
+        print(f"Sending HTTP POST request to Gemini API (Model: {self._settings.gemini_model})...")
         try:
             with request.urlopen(http_request, timeout=self._settings.gemini_timeout_seconds) as response:
                 raw_bytes = response.read()
+                print("Received HTTP 200 response from Gemini API.")
         except error.URLError as exc:
             raise RuntimeError(f"Gemini request failed: {exc}") from exc
 

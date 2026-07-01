@@ -9,6 +9,7 @@ from .core import Settings, get_pr_changed_files
 
 def get_changed_files(settings: Settings, root: Path) -> list[str]:
     """Retrieve changed files from PR or via local git diff."""
+    print("Identifying modified files in the repository...")
     
     if settings.github_pr_number and settings.github_repository and settings.github_token:
         try:
@@ -33,6 +34,7 @@ def get_changed_files(settings: Settings, root: Path) -> list[str]:
 
 def get_full_file_contents(files: list[str], root: Path) -> str:
     """Read the full content of all valid changed text files."""
+    print(f"Extracting full file contents for {len(files)} files (Deep Scan)...")
     
     parts = []
     for filepath in files:
@@ -51,6 +53,7 @@ def get_full_file_contents(files: list[str], root: Path) -> str:
 
 def scan_files_for_errors(files: list[str], root: Path) -> str:
     """Run syntax and import scans on changed files to gather error snippets."""
+    print(f"Running syntax and import scans on {len(files)} files...")
     
     errors = []
     
